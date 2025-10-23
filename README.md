@@ -16,6 +16,20 @@ Agents run continuously in the background, triggered by **events** (e.g., `docum
 
 ---
 
+## 🌍 Vision
+
+**OmniDaemon** is to **AI agents** what **Kubernetes** is to **containers** — a universal runtime that makes intelligent systems autonomous, observable, and scalable.
+
+Our vision is to build the **foundational layer for distributed AI infrastructure** — starting from a simple belief:
+
+> that AI agents shouldn’t just execute prompts, but **live, listen, and react** like real systems.
+
+Born from the need to bridge **intelligence and infrastructure**, OmniDaemon transforms AI from static reasoning engines into **event-driven, self-operating entities** that integrate seamlessly across clouds, data streams, and enterprise environments.
+
+This is how we move AI from experiments to **living, autonomous infrastructure.**
+
+---
+
 ## 🚀 Quick Start
 
 ### 1. Define an agent
