@@ -111,9 +111,10 @@ class BaseAgentRunner:
             "timestamp": asyncio.get_event_loop().time(),
         }
 
-        if task_id:
+        if task_id and self.result_store:
             try:
                 await self.result_store.save_result(task_id, response_payload)
+                logger.info(f"Result saved for task {task_id}")
             except Exception as e:
                 logger.error(f"Failed to save result for {task_id}: {e}")
 

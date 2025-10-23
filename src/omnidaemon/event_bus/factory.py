@@ -39,19 +39,19 @@ class EventBusFactory:
 
         if backend == "redis_pub_sub":
             cls._instance = await cls._load_backend(
-                "src.omnidaemon.event_bus.redis_bus", "RedisPubSubEventBus"
+                "omnidaemon.event_bus.redis_bus", "RedisPubSubEventBus"
             )
         elif backend == "redis_stream":
             cls._instance = await cls._load_backend(
-                "src.omnidaemon.event_bus.redis_stream_bus", "RedisStreamEventBus"
+                "omnidaemon.event_bus.redis_stream_bus", "RedisStreamEventBus"
             )
         elif backend == "rabbitmq":
             cls._instance = await cls._load_backend(
-                "src.omnidaemon.event_bus.rabbitmq_bus", "RabbitMQEventBus"
+                "omnidaemon.event_bus.rabbitmq_bus", "RabbitMQEventBus"
             )
         elif backend == "kafka":
             cls._instance = await cls._load_backend(
-                "src.omnidaemon.event_bus.kafka_bus", "KafkaEventBus"
+                "omnidaemon.event_bus.kafka_bus", "KafkaEventBus"
             )
         else:
             raise ValueError(f"Unsupported event bus backend: {backend}")

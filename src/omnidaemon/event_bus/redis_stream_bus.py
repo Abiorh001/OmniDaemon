@@ -24,7 +24,7 @@ class RedisStreamEventBus:
 
     def __init__(
         self,
-        redis_url: str = config("REDIS_URL", default="redis://localhost:6379/0"),
+        redis_url: str = config("REDIS_URL"),
         default_maxlen: int = 10_000,
         reclaim_idle_ms: int = 60_000,
         reclaim_interval: int = 30,
@@ -79,7 +79,7 @@ class RedisStreamEventBus:
     # ----------------
     async def publish(
         self, topic: str, message: Any, maxlen: Optional[int] = None
-    ) -> str:
+    ) -> None:
         """
         Publish message to stream:{topic}.
         Returns the assigned stream id.
@@ -124,7 +124,7 @@ class RedisStreamEventBus:
         # register callback
         self._callbacks[topic] = callback
 
-        # ensure stream & group exist (mkstream True)
+        # create group if not exists
         try:
             await self._redis.xgroup_create(stream_name, group, id="$", mkstream=True)
             logger.info(f"[RedisStreamBus] created group {group} for {stream_name}")
@@ -260,6 +260,7 @@ class RedisStreamEventBus:
     # ----------------
     # Reclaim loop
     # ----------------
+    # this still work in progress
     async def _reclaim_loop(
         self, stream_name: str, topic: str, group: str, consumer: str
     ):
@@ -380,7 +381,7 @@ class RedisStreamEventBus:
         logger.info(f"[RedisStreamBus] reclaim loop stopped topic={topic}")
 
     # ----------------
-    # Monitor (console + generator)
+    # Monitor emitter
     # ----------------
     async def _emit_monitor(self, metric: dict):
         """

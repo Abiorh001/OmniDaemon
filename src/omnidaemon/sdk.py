@@ -28,7 +28,7 @@ class OmniDaemonSDK:
     # ------------------------
     async def publish_task(
         self, topic: str, payload: Dict[str, Any], reply_to: str = None
-    ):
+    ) -> str:
         if "task_id" not in payload:
             payload["task_id"] = str(uuid.uuid4())
 
@@ -161,8 +161,8 @@ class OmniDaemonSDK:
             await self.register_agent(
                 topic=agent["topic"],
                 callback=agent["func"],
+                name=agent["name"],
                 agent_config={
-                    "name": agent["name"],
                     "tools": agent["tools"],
                     "description": agent["description"],
                 },

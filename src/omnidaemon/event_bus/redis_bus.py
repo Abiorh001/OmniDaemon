@@ -19,9 +19,7 @@ class RedisPubSubEventBus(BaseEventBus):
     - single background listener loop dispatches to callbacks.
     """
 
-    def __init__(
-        self, redis_url: str = config("REDIS_URL", default="redis://localhost:6379/0")
-    ):
+    def __init__(self, redis_url: str = config("REDIS_URL")):
         self.redis_url = redis_url
         self._redis: Optional[aioredis.Redis] = None
         self._pubsub: Optional[aioredis.client.PubSub] = None
@@ -159,12 +157,8 @@ class RedisPubSubEventBus(BaseEventBus):
                         await asyncio.sleep(0.01)
                         continue
 
-                    # Example message shape:
-                    # {'type': 'message', 'pattern': None, 'channel': 'foo', 'data': '{"a":1}'}
                     channel = message.get("channel")
                     raw = message.get("data")
-
-                    # parse JSON to dict if possible
                     payload = None
                     try:
                         if isinstance(raw, (str, bytes)):

@@ -104,12 +104,6 @@ OMNIDAEMON_API_URL=http://localhost:8765
 
 ---
 
-Perfect — that README snippet you showed is your **“quick-start” developer example**, using the **decorator style + `sdk.run()`**, which is great for demos and minimal onboarding.
-
-Now that you’ve switched to the **explicit registration and `sdk.start()` pattern**, here’s how you can **extend your README** to show both approaches clearly — one for quick starts and one for production-level setups.
-
----
-
 ## 🛠️ Developer Experience
 
 ### 🔹 Quick Start (Decorator Style)
@@ -193,12 +187,6 @@ if __name__ == "__main__":
 
 ---
 
-Exactly 👍 — since your README already has a **Developer Experience** section showing how to *consume* the SDK (`sdk.run()` or `.start()`), the next logical part is to show how **developers can publish tasks** to your OmniDaemon network.
-
-Here’s how you can add a clean, consistent **Publisher Example** section to your README — matching your existing tone and markdown style 👇
-
----
-
 ## 🚀 Publishing Tasks
 
 You can publish tasks to any agent topic using the SDK’s built-in `publish_task()` method.
@@ -206,13 +194,11 @@ OmniDaemon supports multiple message buses (Redis, Kafka, RabbitMQ, NATS, etc.),
 
 ```python
 import asyncio
-from redis import asyncio as aioredis
 from src.omnidaemon.sdk import OmniDaemonSDK
 from src.omnidaemon.result_store import RedisResultStore
 
 # Connect to Redis (or any supported store)
-redis = aioredis.from_url("redis://localhost")
-sdk = OmniDaemonSDK(result_store=RedisResultStore(redis))
+sdk = OmniDaemonSDK(result_store=RedisResultStore(redi_url=config("REDIS_URL", default="redis://localhost")))
 
 async def publish_tasks():
     tasks = [
@@ -401,7 +387,3 @@ No lock-in. No opinions. Just pure, scalable, observable agent execution.
 - [ ] Prometheus metrics exporter
 - [ ] Web UI dashboard
 - [ ] Kubernetes operator for scaling
-
----
-
-**OmniDaemon: Autonomous AI agents, running in the background — triggered by events, not requests.**

@@ -11,6 +11,9 @@ vcs = "git"
 style = "pep440"
 bump = true
 
+[tool.uv.sources]
+omnicoreagent = { path = "dist/omnicoreagent-0.2.7-py3-none-any.whl" }
+
 [project]
 name = "omnidaemon"
 dynamic = ["version"]
@@ -19,7 +22,8 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "fastapi>=0.118.2",
-    "omnicoreagent>=0.2.5",
+    "google-adk>=1.16.0",
+    "omnicoreagent",
     "ruff>=0.14.0",
     "tabulate>=0.9.0",
 ]
