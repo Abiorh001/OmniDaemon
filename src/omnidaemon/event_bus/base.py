@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Callable
+from typing import Any, Callable, Dict
 
 
 class BaseEventBus(ABC):
@@ -14,13 +14,24 @@ class BaseEventBus(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def publish(self, topic: str, message: dict) -> None:
+    async def publish(self, event_payload: Dict[str, Any]) -> None:
         raise NotImplementedError
 
     @abstractmethod
-    async def subscribe(self, topic: str, callback: Callable[[dict], Any]) -> None:
+    async def subscribe(
+        self,
+        topic: str,
+        agent_name: str,
+        callback: Callable[[dict], Any],
+        config: Dict[str, Any] = {},
+    ) -> None:
         raise NotImplementedError
 
     @abstractmethod
     async def unsubscribe(self, topic: str) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def get_consumers(self) -> Dict[str, Any]:
+        """Return current consumers and their configurations."""
         raise NotImplementedError

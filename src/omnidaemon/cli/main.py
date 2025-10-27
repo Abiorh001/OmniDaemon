@@ -184,6 +184,7 @@ def agent_list():
     table.add_column("Status", style="yellow")
     table.add_column("Tools", style="dim")
     table.add_column("Description", style="dim")
+    table.add_column("Config", style="magenta")
 
     for topic, agents in data.items():
         for agent in agents:
@@ -194,42 +195,47 @@ def agent_list():
             )
             tools = ", ".join(agent.get("tools", [])) or "—"
             table.add_row(
-                topic, agent["name"], status, tools, agent.get("description", "—")
+                topic,
+                agent["name"],
+                status,
+                tools,
+                agent.get("description", "—"),
+                json.dumps(agent.get("config", {})),
             )
 
     console.print(table)
 
 
-@agent_app.command("start")
-def agent_start(topic: str, name: str):
-    """Start an agent."""
-    _ensure_api_available()
-    _call_api("POST", f"/agents/{topic}/{name}/start")
-    console.print(f"[green] Started agent '{name}' on topic '{topic}'[/]")
+# @agent_app.command("start")
+# def agent_start(topic: str, name: str):
+#     """Start an agent."""
+#     _ensure_api_available()
+#     _call_api("POST", f"/agents/{topic}/{name}/start")
+#     console.print(f"[green] Started agent '{name}' on topic '{topic}'[/]")
 
 
-@agent_app.command("stop")
-def agent_stop(topic: str, name: str):
-    """Stop an agent."""
-    _ensure_api_available()
-    _call_api("POST", f"/agents/{topic}/{name}/stop")
-    console.print(f"[yellow]⏹ Stopped agent '{name}' on topic '{topic}'[/]")
+# @agent_app.command("stop")
+# def agent_stop(topic: str, name: str):
+#     """Stop an agent."""
+#     _ensure_api_available()
+#     _call_api("POST", f"/agents/{topic}/{name}/stop")
+#     console.print(f"[yellow]⏹ Stopped agent '{name}' on topic '{topic}'[/]")
 
 
-@agent_app.command("start-all")
-def agent_start_all():
-    """Start all agents."""
-    _ensure_api_available()
-    _call_api("POST", "/agents/start")
-    console.print("[green] Started all agents[/]")
+# @agent_app.command("start-all")
+# def agent_start_all():
+#     """Start all agents."""
+#     _ensure_api_available()
+#     _call_api("POST", "/agents/start")
+#     console.print("[green] Started all agents[/]")
 
 
-@agent_app.command("stop-all")
-def agent_stop_all():
-    """Stop all agents."""
-    _ensure_api_available()
-    _call_api("POST", "/agents/stop")
-    console.print("[yellow]⏹ Stopped all agents[/]")
+# @agent_app.command("stop-all")
+# def agent_stop_all():
+#     """Stop all agents."""
+#     _ensure_api_available()
+#     _call_api("POST", "/agents/stop")
+#     console.print("[yellow]⏹ Stopped all agents[/]")
 
 
 # -------------------------
@@ -281,7 +287,7 @@ def health():
             f"[bold cyan]Status:[/]\t{data['status']}",
             f"[bold cyan]Event Bus:[/]\t{'✅ Connected' if data['event_bus_connected'] else '❌ Disconnected'}",
             f"[bold cyan]Topics:[/]\t{', '.join(data['subscribed_topics'])}",
-            f"[bold cyan]Active Agents:[/]\t{data['active_agents']}",
+            f"[bold cyan]Agents:[/]\t{data['agents']}",
             f"[bold cyan]Uptime:[/]\t{data['uptime_seconds']:.1f} seconds",
         ]
     )
@@ -305,7 +311,6 @@ def metrics():
     table.add_column("Received", justify="right", style="dim")
     table.add_column("Processed", justify="right", style="green")
     table.add_column("Failed", justify="right", style="red")
-    table.add_column("Skipped", justify="right", style="yellow")
     table.add_column("Avg Time (s)", justify="right", style="blue")
     table.add_column("Total Time (s)", justify="right", style="cyan")
 
@@ -317,7 +322,6 @@ def metrics():
                 str(stats["tasks_received"]),
                 str(stats["tasks_processed"]),
                 str(stats["tasks_failed"]),
-                str(stats["tasks_skipped"]),
                 f"{stats['avg_processing_time_sec']:.3f}",
                 f"{stats['total_processing_time']:.3f}",
             )

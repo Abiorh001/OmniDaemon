@@ -7,7 +7,8 @@ import uuid
 import time
 from omnidaemon.agent_runner.runner import BaseAgentRunner
 from omnidaemon.result_store import ResultStore
-
+from omnidaemon.schemas import AgentConfig, EventEnvelope, PayloadBase
+from pydantic import ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -26,20 +27,43 @@ class OmniDaemonSDK:
     # ------------------------
     # Task Publisher
     # ------------------------
-    async def publish_task(
-        self, topic: str, payload: Dict[str, Any], reply_to: str = None
-    ) -> str:
-        if "task_id" not in payload:
-            payload["task_id"] = str(uuid.uuid4())
+    async def publish_task(self, event_envelope: EventEnvelope) -> str:
+        try:
+            topic = event_envelope.topic
+            payload = event_envelope.payload
+            content = payload.content
+            webhook = payload.webhook
+            task_id = event_envelope.id or str(uuid.uuid4())
+            correlation_id = event_envelope.correlation_id
+            tenant_id = event_envelope.tenant_id
+            source = event_envelope.source
+            causation_id = event_envelope.causation_id
 
-        if reply_to:
-            payload["reply_to"] = reply_to
-        if "topic" not in payload:
-            payload["topic"] = topic
-
-        await self.runner.publish(topic, payload)
-        logger.info(f"Published task '{payload['task_id']}' to topic '{topic}'")
-        return payload["task_id"]
+            event_payload_schema = EventEnvelope(
+                topic=topic,
+                id=task_id,
+                correlation_id=correlation_id,
+                tenant_id=tenant_id,
+                source=source,
+                payload=PayloadBase(content=content, webhook=webhook),
+                causation_id=causation_id,
+            )
+            publish_event = {
+                k: v
+                for k, v in event_payload_schema.model_dump().items()
+                if v is not None
+            }
+            # update the paylaod to dict
+            publish_event["payload"] = event_payload_schema.payload.model_dump()
+            await self.runner.publish(event_payload=publish_event)
+            logger.info(f"Published task '{task_id}' to topic '{topic}'")
+            return task_id
+        except ValidationError as ve:
+            logger.error(f"EventEnvelope validation error: {ve}")
+            raise
+        except Exception as e:
+            logger.error(f"Error parsing EventEnvelope: {e}")
+            raise
 
     def agent(
         self,
@@ -75,45 +99,54 @@ class OmniDaemonSDK:
     # ------------------------
     # Register Agent Callback
     # ------------------------
-    async def register_agent(
-        self,
-        name: str,
-        topic: str,
-        callback: Callable[[Dict[str, Any]], Any],
-        agent_config: Optional[Dict[str, Any]] = None,
-        active: bool = True,
-    ):
+    async def register_agent(self, agent_config: AgentConfig):
         """
-        Register an agent to a topic with a callback.
+        Register an agent to a topic with a callback., and add other metadata.
+
         """
+        try:
+            name = agent_config.name
+            topic = agent_config.topic
+            callback = agent_config.callback
+            tools = agent_config.tools
+            description = agent_config.description
+            config = agent_config.config
+            sub_config = {k: v for k, v in config.model_dump().items() if v is not None}
+            logger.info(
+                f"Registering agent '{name}' on topic '{topic}' , config={sub_config})"
+            )
 
-        if agent_config is None:
-            agent_config = {}
-
-        description = agent_config.get("description", "")
-        tools = agent_config.get("tools", [])
-
-        subscription = {
-            "callback": callback,
-            "name": name,
-            "tools": tools,
-            "description": description,
-            "status": "running" if active else "stopped",
-        }
-        agent_name = subscription.get("name", "unnamed")
-        key = (topic, agent_name)
-        self.runner._metrics[key] = {
-            "tasks_received": 0,
-            "tasks_processed": 0,
-            "tasks_failed": 0,
-            "tasks_skipped": 0,
-            "total_processing_time": 0.0,
-        }
-        await self.runner.register_handler(topic, subscription)
+            subscription = {
+                "callback": callback,
+                "name": name,
+                "tools": tools,
+                "description": description,
+                "config": sub_config,
+            }
+            agent_name = subscription.get("name", "unnamed")
+            key = (topic, agent_name)
+            self.runner._metrics[key] = {
+                "tasks_received": 0,
+                "tasks_processed": 0,
+                "tasks_failed": 0,
+                "total_processing_time": 0.0,
+            }
+            await self.runner.register_handler(
+                topic=topic, subscription=subscription, config=sub_config
+            )
+        except ValidationError as ve:
+            logger.error(f"AgentConfig validation error: {ve}")
+            raise
+        except Exception as e:
+            logger.error(f"Error registering agent '{agent_config.name}': {e}")
+            raise
 
     async def get_result(self, task_id: str) -> Optional[Dict[str, Any]]:
         if self._external_result_store:
             return await self._external_result_store.get_result(task_id)
+        else:
+            logger.warning("No external result store configured; cannot fetch results.")
+            return None
 
     # ------------------------
     # Start / Stop
@@ -184,36 +217,33 @@ class OmniDaemonSDK:
     # ------------------------
     # Start / Stop Individual Agent
     # ------------------------
-    async def start_agent(self, topic: str, agent_name: str):
-        for sub in self.runner._handlers.get(topic, []):
-            if sub["name"] == agent_name:
-                sub["status"] = "running"
-                logger.info(f"Started agent '{agent_name}' on topic '{topic}'")
-                return
-        logger.warning(f"Agent '{agent_name}' not found on topic '{topic}'")
+    # async def start_agent(self, topic: str, agent_name: str):
+    #     for sub in self.runner._handlers.get(topic, []):
+    #         if sub["name"] == agent_name:
+    #             logger.info(f"Started agent '{agent_name}' on topic '{topic}'")
+    #             return
+    #     logger.warning(f"Agent '{agent_name}' not found on topic '{topic}'")
 
-    async def stop_agent(self, topic: str, agent_name: str):
-        for sub in self.runner._handlers.get(topic, []):
-            if sub["name"] == agent_name:
-                sub["status"] = "stopped"
-                logger.info(f"⏹ Stopped agent '{agent_name}' on topic '{topic}'")
-                return
-        logger.warning(f"Agent '{agent_name}' not found on topic '{topic}'")
+    # async def stop_agent(self, topic: str, agent_name: str):
+    #     for sub in self.runner._handlers.get(topic, []):
+    #         if sub["name"] == agent_name:
+    #             logger.info(f"⏹ Stopped agent '{agent_name}' on topic '{topic}'")
+    #             return
+    #     logger.warning(f"Agent '{agent_name}' not found on topic '{topic}'")
 
     # ------------------------
     # Start / Stop All Agents
     # ------------------------
-    async def start_all_agents(self):
-        for topic_subs in self.runner._handlers.values():
-            for sub in topic_subs:
-                sub["status"] = "running"
-        logger.info("Started all agents")
+    # async def start_all_agents(self):
+    #     for topic_subs in self.runner._handlers.values():
+    #         for sub in topic_subs:
+    #     logger.info("Started all agents")
 
-    async def stop_all_agents(self):
-        for topic_subs in self.runner._handlers.values():
-            for sub in topic_subs:
-                sub["status"] = "stopped"
-        logger.info("Stopped all agents")
+    # async def stop_all_agents(self):
+    #     for topic_subs in self.runner._handlers.values():
+    #         for sub in topic_subs:
+    #             sub["status"] = "stopped"
+    #     logger.info("Stopped all agents")
 
     # ------------------------
     # List Agents / Dashboard
@@ -229,7 +259,7 @@ class OmniDaemonSDK:
                     "name": sub["name"],
                     "tools": sub["tools"],
                     "description": sub["description"],
-                    "status": sub["status"],
+                    "config": sub.get("config", {}),
                 }
                 for sub in subs
             ]
@@ -251,12 +281,7 @@ class OmniDaemonSDK:
             "status": "running" if self.runner._running else "stopped",
             "event_bus_connected": self.runner.bus is not None,
             "subscribed_topics": list(self.runner._handlers.keys()),
-            "active_agents": sum(
-                1
-                for subs in self.runner._handlers.values()
-                for sub in subs
-                if sub.get("status") == "running"
-            ),
+            "agents": self.list_agents(),
             "uptime_seconds": time.time() - getattr(self, "_start_time", 0),
         }
 
@@ -273,7 +298,6 @@ class OmniDaemonSDK:
                 "tasks_received": stats["tasks_received"],
                 "tasks_processed": stats["tasks_processed"],
                 "tasks_failed": stats["tasks_failed"],
-                "tasks_skipped": stats["tasks_skipped"],
                 "avg_processing_time_sec": round(avg_time, 3),
                 "total_processing_time": round(stats["total_processing_time"], 3),
             }

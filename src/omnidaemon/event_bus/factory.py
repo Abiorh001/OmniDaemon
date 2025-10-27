@@ -37,11 +37,7 @@ class EventBusFactory:
         cls._backend_name = backend
         logger.info(f"[EventBusFactory] Initializing event bus backend: {backend}")
 
-        if backend == "redis_pub_sub":
-            cls._instance = await cls._load_backend(
-                "omnidaemon.event_bus.redis_bus", "RedisPubSubEventBus"
-            )
-        elif backend == "redis_stream":
+        if backend == "redis_stream":
             cls._instance = await cls._load_backend(
                 "omnidaemon.event_bus.redis_stream_bus", "RedisStreamEventBus"
             )

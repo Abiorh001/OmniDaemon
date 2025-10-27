@@ -6,7 +6,7 @@ from decouple import config
 from src.omnidaemon.result_store import RedisResultStore
 from src.omnidaemon.sdk import OmniDaemonSDK
 from src.omnidaemon.api.server import start_api_server
-
+from omnidaemon.schemas import AgentConfig, SubscriptionConfig
 
 sdk = OmniDaemonSDK(
     result_store=RedisResultStore(
@@ -130,21 +130,24 @@ filesystem_agent_runner = OmniAgentRunner()
 
 
 async def call_file_system_agent(message: dict):
-    print("document agent get task")
+    print(f"event payload is here: {message}")
     await filesystem_agent_runner.initialize()
     result = await filesystem_agent_runner.handle_chat(message=message.get("content"))
     return {"status": "success", "data": result}
 
 
 async def main():
-    # Register agents for multiple topics
     await sdk.register_agent(
-        name="OMNICOREAGENT_FILESYSTEM_AGENT",
-        topic="file_system.tasks",
-        callback=call_file_system_agent,
-        agent_config={
-            "description": "Help the user manage their files. You can list files, read files, etc.",
-        },
+        agent_config=AgentConfig(
+            name="OMNICOREAGENT_FILESYSTEM_AGENT",
+            topic="file_system.tasks",
+            callback=call_file_system_agent,
+            description="Help the user manage their files. You can list files, read files, etc.",
+            tools=[],
+            config=SubscriptionConfig(
+                reclaim_idle_ms=6000, dlq_retry_limit=3, consumer_count=3
+            ),
+        )
     )
 
     # Start the agent runner

@@ -1,42 +1,53 @@
-from omnicoreagent import OmniAgent, ToolRegistry, MemoryRouter, EventRouter
-from typing import Optional
 import asyncio
 import logging
 from decouple import config
-from redis import asyncio as aioredis
-from src.omnidaemon.result_store import RedisResultStore
-from src.omnidaemon.sdk import OmniDaemonSDK
-from src.omnidaemon.api.server import start_api_server
+from omnidaemon.result_store import RedisResultStore
+from omnidaemon.sdk import OmniDaemonSDK
+from omnidaemon.api.server import start_api_server
 from examples.omnicoreagent.agent_runner import (
     call_file_system_agent as call_file_system_agent_omnicoreagent,
 )
 from examples.google_adk.agent_runner import (
     call_file_system_agent as call_file_system_agent_google_adk,
 )
+from omnidaemon.schemas import AgentConfig, SubscriptionConfig
 
-redis = aioredis.from_url("redis://localhost")
-sdk = OmniDaemonSDK(result_store=RedisResultStore(redis))
+sdk = OmniDaemonSDK(
+    result_store=RedisResultStore(
+        redi_url=config("REDIS_URL", default="redis://localhost")
+    )
+)
 logger = logging.getLogger(__name__)
 
 
 async def main():
     # Register agents for multiple topics
     await sdk.register_agent(
-        name="OMNICOREAGENT_FILESYSTEM_AGENT",
-        topic="file_system.tasks",
-        callback=call_file_system_agent_omnicoreagent,
-        agent_config={
-            "description": "Help the user manage their files. You can list files, read files, etc.",
-        },
+        agent_config=AgentConfig(
+            name="OMNICOREAGENT_FILESYSTEM_AGENT",
+            topic="file_system.tasks",
+            callback=call_file_system_agent_omnicoreagent,
+            description="Help the user manage their files. You can list files, read files, etc.",
+            tools=[],
+            config=SubscriptionConfig(
+                reclaim_idle_ms=60000, dlq_retry_limit=1, consumer_count=3
+            ),
+        )
     )
 
     await sdk.register_agent(
-        name="GOOGLE_ADK_FILESYSTEM_AGENT",
-        topic="file_system.tasks",
-        callback=call_file_system_agent_google_adk,
-        agent_config={
-            "description": "Help the user manage their files. You can list files, read files, etc.",
-        },
+        agent_config=AgentConfig(
+            name="GOOGLE_ADK_FILESYSTEM_AGENT",
+            topic="file_system.tasks",
+            callback=call_file_system_agent_google_adk,
+            description="Help the user manage their files. You can list files, read files, etc.",
+            tools=[],
+            config=SubscriptionConfig(
+                reclaim_idle_ms=50000,
+                dlq_retry_limit=5,
+                consumer_count=2,
+            ),
+        )
     )
 
     # Start the agent runner

@@ -14,7 +14,7 @@ from omnidaemon.api.server import start_api_server
 import logging
 from dotenv import load_dotenv
 from google.adk.models.lite_llm import LiteLlm
-
+from omnidaemon.schemas import AgentConfig, SubscriptionConfig
 
 load_dotenv()
 # api_key = os.getenv("GOOGLE_API_KEY")
@@ -37,8 +37,8 @@ TARGET_FOLDER_PATH = os.path.join(
 # If you created ./adk_agent_samples/mcp_agent/your_folder,
 
 filesystem_agent = LlmAgent(
-    model="gemini-2.0-flash",
-    # model=LiteLlm(model="openai/gpt-4.1"),
+    # model="gemini-2.0-flash",
+    model=LiteLlm(model="openai/gpt-4.1"),
     # model=LiteLlm(model="gemini/gemini-2.0-flash"),
     name="filesystem_assistant_agent",
     instruction="Help the user manage their files. You can list files, read files, etc.",
@@ -118,14 +118,17 @@ async def call_file_system_agent(message: dict):
 
 
 async def main():
-    # Register agents for multiple topics
     await sdk.register_agent(
-        name="GOOGLE_ADK_FILESYSTEM_AGENT",
-        topic="file_system.tasks",
-        callback=call_file_system_agent,
-        agent_config={
-            "description": "Help the user manage their files. You can list files, read files, etc.",
-        },
+        agent_config=AgentConfig(
+            name="GOOGLE_ADK_FILESYSTEM_AGENT",
+            topic="file_system.tasks",
+            callback=call_file_system_agent,
+            description="Help the user manage their files. You can list files, read files, etc.",
+            tools=[],
+            config=SubscriptionConfig(
+                reclaim_idle_ms=6000, dlq_retry_limit=3, consumer_count=3
+            ),
+        )
     )
 
     # Start the agent runner

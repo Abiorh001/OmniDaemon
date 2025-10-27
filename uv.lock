@@ -322,16 +322,16 @@ wheels = [
 
 [[package]]
 name = "boto3-stubs"
-version = "1.40.56"
+version = "1.40.57"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "botocore-stubs" },
     { name = "types-s3transfer" },
     { name = "typing-extensions", marker = "python_full_version < '3.12'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/85/f0/89cdb2336bac8bd9779b0166d96c1ab5e33a5133e2e6570961ee6547b612/boto3_stubs-1.40.56.tar.gz", hash = "sha256:e5644523eff7f50bade5e9f4a24544b40f849e9051949e3501203a20627f4263", size = 100883 }
+sdist = { url = "https://files.pythonhosted.org/packages/9e/9b/87f1be8a24cfdf5734e6083839ca8c469e11a37964fce3cdc97a2336a379/boto3_stubs-1.40.57.tar.gz", hash = "sha256:fe98f6be9af14bdfb5edf449cb938da68c48c697d6858c3497396bae6cf526a3", size = 101079 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/b0/ba/eaf0d9ea82877d9e2a4ea10bcdca2c06442fd030511802b880f057b57764/boto3_stubs-1.40.56-py3-none-any.whl", hash = "sha256:638398e9b58769db8d050f93cd81aab8213e6a617f13dcd1632c4b09c870c732", size = 69707 },
+    { url = "https://files.pythonhosted.org/packages/6c/7b/d8ecdebc8bf1bc2801329b960e4c2af2127bf878481ded744e67b3d01eb3/boto3_stubs-1.40.57-py3-none-any.whl", hash = "sha256:697ec2b7fa4c636ec93ad7a2a5f0cf62a4027e51817897762d7611e355fe88e4", size = 69819 },
 ]
 
 [package.optional-dependencies]
@@ -341,14 +341,14 @@ bedrock-runtime = [
 
 [[package]]
 name = "botocore-stubs"
-version = "1.40.56"
+version = "1.40.57"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "types-awscrt" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/48/ea/f174fc13a6e150021d6a0c51e58dc14d9730d319bdefc721bd7562ae513f/botocore_stubs-1.40.56.tar.gz", hash = "sha256:aa9535b8a0f7135b062504e39e7cbc83fb3f00b2d4dc2baba6170436b494b696", size = 42252 }
+sdist = { url = "https://files.pythonhosted.org/packages/c5/01/50445e4ffedf976702a7f86ab947e22099422858e51b7ac097a216a6f36e/botocore_stubs-1.40.57.tar.gz", hash = "sha256:d82ccae25ddbfee9521fbeb64c3c1f1d8716a6fd76c2e0bb589df90958536e3c", size = 42234 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/87/d1/caa24e5310b2f10b7ba69f81043e827f9085ad88a8ad46d545cb9427292a/botocore_stubs-1.40.56-py3-none-any.whl", hash = "sha256:e6494eef30a5979e8f270f058bd81bc803641fa0ea97414b53c7f0e52d82d227", size = 66543 },
+    { url = "https://files.pythonhosted.org/packages/70/ec/5d0a1745f30a79959aed233af90e3ec37177975d3a96069faa918b5c4f87/botocore_stubs-1.40.57-py3-none-any.whl", hash = "sha256:2a0c382d42b8847adb58552d3bc36dd10eef1b8a4f81ae89713076a3fa377be1", size = 66542 },
 ]
 
 [[package]]
@@ -1760,7 +1760,7 @@ wheels = [
 
 [[package]]
 name = "huggingface-hub"
-version = "0.35.3"
+version = "0.36.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "filelock" },
@@ -1772,9 +1772,9 @@ dependencies = [
     { name = "tqdm" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/10/7e/a0a97de7c73671863ca6b3f61fa12518caf35db37825e43d63a70956738c/huggingface_hub-0.35.3.tar.gz", hash = "sha256:350932eaa5cc6a4747efae85126ee220e4ef1b54e29d31c3b45c5612ddf0b32a", size = 461798 }
+sdist = { url = "https://files.pythonhosted.org/packages/98/63/4910c5fa9128fdadf6a9c5ac138e8b1b6cee4ca44bf7915bbfbce4e355ee/huggingface_hub-0.36.0.tar.gz", hash = "sha256:47b3f0e2539c39bf5cde015d63b72ec49baff67b6931c3d97f3f84532e2b8d25", size = 463358 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/31/a0/651f93d154cb72323358bf2bbae3e642bdb5d2f1bfc874d096f7cb159fa0/huggingface_hub-0.35.3-py3-none-any.whl", hash = "sha256:0e3a01829c19d86d03793e4577816fe3bdfc1602ac62c7fb220d593d351224ba", size = 564262 },
+    { url = "https://files.pythonhosted.org/packages/cb/bd/1a875e0d592d447cbc02805fd3fe0f497714d6a2583f59d14fa9ebad96eb/huggingface_hub-0.36.0-py3-none-any.whl", hash = "sha256:7bcc9ad17d5b3f07b57c78e79d527102d08313caa278a641993acddcb894548d", size = 566094 },
 ]
 
 [[package]]
@@ -2601,8 +2601,8 @@ wheels = [
 
 [[package]]
 name = "omnicoreagent"
-version = "0.2.7"
-source = { path = "dist/omnicoreagent-0.2.7-py3-none-any.whl" }
+version = "0.2.8"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
     { name = "apscheduler" },
@@ -2633,40 +2633,9 @@ dependencies = [
     { name = "tzlocal" },
     { name = "websockets" },
 ]
+sdist = { url = "https://files.pythonhosted.org/packages/fb/a0/09695dc0a660de14f306ce557ca857a52eb1afda9f65a971772780975c19/omnicoreagent-0.2.8.tar.gz", hash = "sha256:fe2220be526a4fe468ea40c20278afcf8314d882fb77c203b59fc849b7386fb2", size = 198671 }
 wheels = [
-    { filename = "omnicoreagent-0.2.7-py3-none-any.whl", hash = "sha256:7ae1cae68a14c2ae5ac6acaa84e766dd852ef9f0da70820bdb4914e879e09aa9" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "anyio", specifier = ">=4.2.0" },
-    { name = "apscheduler", specifier = ">=3.11.0" },
-    { name = "chromadb", specifier = ">=1.0.15" },
-    { name = "colorama", specifier = ">=0.4.6" },
-    { name = "colorlog", specifier = ">=6.9.0" },
-    { name = "cryptography", specifier = ">=45.0.6" },
-    { name = "fastapi", specifier = ">=0.115.12" },
-    { name = "fastapi-sso", specifier = ">=0.18.0" },
-    { name = "httpx", specifier = ">=0.26.0" },
-    { name = "httpx-sse", specifier = ">=0.4.0" },
-    { name = "litellm", specifier = ">=1.75.2" },
-    { name = "mcp", extras = ["cli"], specifier = ">=1.9.1" },
-    { name = "motor", specifier = ">=3.7.1" },
-    { name = "opik", specifier = ">=1.8.19" },
-    { name = "psutil", specifier = ">=7.0.0" },
-    { name = "psycopg2-binary", specifier = ">=2.9.10" },
-    { name = "pydantic", extras = ["email"], specifier = ">=2.6.0" },
-    { name = "pymongo", specifier = ">=4.15.1" },
-    { name = "pymupdf", specifier = ">=1.26.3" },
-    { name = "python-decouple", specifier = ">=3.8" },
-    { name = "python-dotenv", specifier = ">=1.0.1" },
-    { name = "python-multipart", specifier = ">=0.0.20" },
-    { name = "qdrant-client", specifier = ">=1.15.0" },
-    { name = "redis", specifier = ">=5.2.1" },
-    { name = "rich", specifier = ">=13.9.4" },
-    { name = "sqlalchemy", specifier = ">=2.0.0" },
-    { name = "tzlocal", specifier = ">=5.2" },
-    { name = "websockets", specifier = ">=15.0.1" },
+    { url = "https://files.pythonhosted.org/packages/df/cf/63f401e076bdaa43f3a6096f4eaf6ae1f2a25610667d21e400b88643a354/omnicoreagent-0.2.8-py3-none-any.whl", hash = "sha256:94ec518d24ae2274490ebd0181963b805af435d137f77c107cc974090aa4726d", size = 212713 },
 ]
 
 [[package]]
@@ -2684,7 +2653,7 @@ dependencies = [
 requires-dist = [
     { name = "fastapi", specifier = ">=0.118.2" },
     { name = "google-adk", specifier = ">=1.16.0" },
-    { name = "omnicoreagent", path = "dist/omnicoreagent-0.2.7-py3-none-any.whl" },
+    { name = "omnicoreagent", specifier = ">=0.2.8" },
     { name = "ruff", specifier = ">=0.14.0" },
     { name = "tabulate", specifier = ">=0.9.0" },
 ]
@@ -2905,7 +2874,7 @@ wheels = [
 
 [[package]]
 name = "opik"
-version = "1.8.84"
+version = "1.8.85"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "boto3-stubs", extra = ["bedrock-runtime"] },
@@ -2924,9 +2893,9 @@ dependencies = [
     { name = "tqdm" },
     { name = "uuid6" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/5c/1e/6574a39221a2847453331e8573c8167065afd71d69595ebccebaa8c83f5d/opik-1.8.84.tar.gz", hash = "sha256:5c06624c93a9cb13a14936d43e637a571472ede3aa3df851be0e6fd4e95fd5d2", size = 432956 }
+sdist = { url = "https://files.pythonhosted.org/packages/9c/ac/1295ff9c33c31ff95505265d41e7e00fda6fddfd68376ed7681ea5f5799b/opik-1.8.85.tar.gz", hash = "sha256:777ca0ca7b40cc5a0b30e4e65798520b5b8f0a3370f48ee7bb3f0bea551e19a2", size = 432847 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/27/d7/886071ed2716c3748725c9ed80cc7c47de0c71d4c7854348f0b0d953978b/opik-1.8.84-py3-none-any.whl", hash = "sha256:7e7496b14cc25fde3298c485b074595513dfd1ae67fba1e2fb80c5ed29d48ab5", size = 800046 },
+    { url = "https://files.pythonhosted.org/packages/88/0b/0f6d2fc94a7d004684c568c0fa9a7bd047f574062d08666fa805a29de5bd/opik-1.8.85-py3-none-any.whl", hash = "sha256:577b345837d681b9b151a35d258a9d1038ed43ab77972b062ec44ec439da1dbf", size = 800096 },
 ]
 
 [[package]]
@@ -3997,14 +3966,14 @@ wheels = [
 
 [[package]]
 name = "redis"
-version = "6.4.0"
+version = "7.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "async-timeout", marker = "python_full_version < '3.11.3'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/0d/d6/e8b92798a5bd67d659d51a18170e91c16ac3b59738d91894651ee255ed49/redis-6.4.0.tar.gz", hash = "sha256:b01bc7282b8444e28ec36b261df5375183bb47a07eb9c603f284e89cbc5ef010", size = 4647399 }
+sdist = { url = "https://files.pythonhosted.org/packages/d2/0e/80de0c7d9b04360331906b6b713a967e6523d155a92090983eba2e99302e/redis-7.0.0.tar.gz", hash = "sha256:6546ada54354248a53a47342d36abe6172bb156f23d24f018fda2e3c06b9c97a", size = 4754895 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e8/02/89e2ed7e85db6c93dfa9e8f691c5087df4e3551ab39081a4d7c6d1f90e05/redis-6.4.0-py3-none-any.whl", hash = "sha256:f0544fa9604264e9464cdf4814e7d4830f74b165d52f2a330a760a88dd248b7f", size = 279847 },
+    { url = "https://files.pythonhosted.org/packages/aa/de/68c1add9d9a49588e6f75a149e079e44bab973e748a35e0582ccada09002/redis-7.0.0-py3-none-any.whl", hash = "sha256:1e66c8355b3443af78367c4937484cd875fdf9f5f14e1fed14aa95869e64f6d1", size = 339526 },
 ]
 
 [[package]]

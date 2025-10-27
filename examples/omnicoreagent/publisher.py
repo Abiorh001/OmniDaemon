@@ -2,6 +2,8 @@ import asyncio
 from omnidaemon.sdk import OmniDaemonSDK
 from omnidaemon.result_store import RedisResultStore
 from decouple import config
+from omnidaemon.schemas import AgentConfig, EventEnvelope, PayloadBase
+
 
 sdk = OmniDaemonSDK(
     result_store=RedisResultStore(
@@ -20,11 +22,18 @@ async def publish_tasks(sdk: OmniDaemonSDK):
 **5. Read File:** I will read the content of "file1.txt" to verify the content was written correctly.
 **6. Edit File:** I will edit "file2.txt" to replace some text.
 **7. Move File:** I will move "file1.txt" to "file3.txt
-"""
-        # "webhook": "http://localhost:8004/document_conversion_result",
+""",
+        "webhook": "http://localhost:8004/document_conversion_result",
     }
     topic = "file_system.tasks"
-    await sdk.publish_task(topic=topic, payload=payload)
+    event_payload = EventEnvelope(
+        topic=topic,
+        payload=PayloadBase(
+            content=payload["content"],
+            webhook=payload.get("webhook"),
+        ),
+    )
+    await sdk.publish_task(event_envelope=event_payload)
 
 
 if __name__ == "__main__":
