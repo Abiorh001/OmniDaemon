@@ -1,0 +1,857 @@
+# Configuration Guide
+
+This comprehensive guide covers all OmniDaemon configuration options, from environment variables to production tuning.
+
+---
+
+## Overview
+
+**What You'll Learn:**
+- ✅ All environment variables (required & optional)
+- ✅ Event bus configuration (Redis, Kafka, RabbitMQ, NATS)
+- ✅ Storage configuration (JSON, Redis, PostgreSQL, MongoDB)
+- ✅ Agent configuration (SubscriptionConfig)
+- ✅ Performance tuning
+- ✅ Dev/staging/prod configurations
+- ✅ Security best practices
+- ✅ Troubleshooting configuration issues
+
+---
+
+## Environment Variables
+
+### Core Configuration
+
+#### `EVENT_BUS_TYPE` (Required)
+
+**What:** Event bus backend type  
+**Default:** `redis_stream`  
+**Options:**
+- `redis_stream` ✅ Production-ready
+- `kafka` 🚧 Coming soon
+- `rabbitmq` 🚧 Coming soon
+- `nats` 🚧 Coming soon
+
+**Example:**
+```bash
+EVENT_BUS_TYPE=redis_stream
+```
+
+#### `STORAGE_BACKEND` (Required)
+
+**What:** Storage backend type  
+**Default:** `json`  
+**Options:**
+- `json` ✅ Development (file-based)
+- `redis` ✅ Production (in-memory + persistent)
+- `postgresql` 🚧 Coming soon
+- `mongodb` 🚧 Coming soon
+
+**Example:**
+```bash
+STORAGE_BACKEND=redis
+```
+
+---
+
+### Redis Configuration
+
+#### `REDIS_URL` (Required if using Redis)
+
+**What:** Redis connection URL  
+**Format:** `redis://[username:password@]host:port[/database]`  
+**Default:** `redis://localhost:6379`
+
+**Examples:**
+```bash
+# Local Redis (default)
+REDIS_URL=redis://localhost:6379
+
+# Remote Redis
+REDIS_URL=redis://redis-server:6379
+
+# Redis with password
+REDIS_URL=redis://:mypassword@localhost:6379
+
+# Redis with database number
+REDIS_URL=redis://localhost:6379/0
+
+# Redis Sentinel
+REDIS_URL=redis+sentinel://sentinel1:26379,sentinel2:26379/mymaster/0
+
+# Redis Cluster
+REDIS_URL=redis://node1:6379,node2:6379,node3:6379
+
+# Redis with TLS
+REDIS_URL=rediss://secure-redis:6380  # Note: rediss://
+```
+
+#### `REDIS_KEY_PREFIX` (Optional)
+
+**What:** Namespace for Redis keys  
+**Default:** `omni`  
+**Use case:** Multiple OmniDaemon instances on same Redis
+
+**Example:**
+```bash
+REDIS_KEY_PREFIX=omni_production
+# Keys become: omni_production:agent:...
+```
+
+---
+
+### JSON Storage Configuration
+
+#### `JSON_STORAGE_DIR` (Optional)
+
+**What:** Directory for JSON files  
+**Default:** `.omnidaemon_data`
+
+**Example:**
+```bash
+JSON_STORAGE_DIR=/var/lib/omnidaemon/data
+```
+
+**File Structure:**
+```
+/var/lib/omnidaemon/data/
+├── agents.json      # Agent registry
+├── results.json     # Task results
+├── metrics.json     # Metrics
+└── config.json      # Configuration
+```
+
+---
+
+### API Configuration
+
+#### `OMNIDAEMON_API_ENABLED` (Optional)
+
+**What:** Enable HTTP API server  
+**Default:** `false`  
+**Type:** Boolean
+
+**Example:**
+```bash
+OMNIDAEMON_API_ENABLED=true
+```
+
+#### `OMNIDAEMON_API_PORT` (Optional)
+
+**What:** API server port  
+**Default:** `8765`  
+**Type:** Integer
+
+**Example:**
+```bash
+OMNIDAEMON_API_PORT=8765
+```
+
+#### `OMNIDAEMON_API_HOST` (Optional)
+
+**What:** API server host  
+**Default:** `0.0.0.0` (all interfaces)
+
+**Example:**
+```bash
+OMNIDAEMON_API_HOST=127.0.0.1  # Localhost only
+```
+
+---
+
+### Logging Configuration
+
+#### `LOG_LEVEL` (Optional)
+
+**What:** Logging verbosity  
+**Default:** `INFO`  
+**Options:** `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`
+
+**Example:**
+```bash
+LOG_LEVEL=INFO
+```
+
+**Log Levels:**
+- `DEBUG`: All details (development)
+- `INFO`: General information (production)
+- `WARNING`: Warnings only
+- `ERROR`: Errors only
+- `CRITICAL`: Critical errors only
+
+---
+
+## Complete `.env` Examples
+
+### Development Configuration
+
+```bash
+# .env (development)
+
+# Event Bus
+EVENT_BUS_TYPE=redis_stream
+REDIS_URL=redis://localhost:6379
+
+# Storage (JSON for development)
+STORAGE_BACKEND=json
+JSON_STORAGE_DIR=.omnidaemon_data
+
+# API (optional for dev)
+OMNIDAEMON_API_ENABLED=false
+
+# Logging
+LOG_LEVEL=DEBUG
+```
+
+### Staging Configuration
+
+```bash
+# .env (staging)
+
+# Event Bus
+EVENT_BUS_TYPE=redis_stream
+REDIS_URL=redis://staging-redis:6379
+
+# Storage (Redis for persistence)
+STORAGE_BACKEND=redis
+REDIS_KEY_PREFIX=omni_staging
+
+# API
+OMNIDAEMON_API_ENABLED=true
+OMNIDAEMON_API_PORT=8765
+OMNIDAEMON_API_HOST=0.0.0.0
+
+# Logging
+LOG_LEVEL=INFO
+```
+
+### Production Configuration
+
+```bash
+# .env (production)
+
+# Event Bus
+EVENT_BUS_TYPE=redis_stream
+REDIS_URL=redis://:strong_password@prod-redis:6379/0
+
+# Storage
+STORAGE_BACKEND=redis
+REDIS_KEY_PREFIX=omni_production
+
+# API
+OMNIDAEMON_API_ENABLED=true
+OMNIDAEMON_API_PORT=8765
+OMNIDAEMON_API_HOST=0.0.0.0
+
+# Logging
+LOG_LEVEL=INFO
+
+# Security (if using TLS)
+# REDIS_URL=rediss://prod-redis:6380
+```
+
+---
+
+## Agent Configuration (SubscriptionConfig)
+
+### All Parameters
+
+```python
+from omnidaemon import AgentConfig, SubscriptionConfig
+
+await sdk.register_agent(
+    agent_config=AgentConfig(
+        # REQUIRED
+        topic="file.uploaded",
+        callback=process_file,
+        
+        # OPTIONAL
+        name="file-processor",
+        description="Processes uploaded files",
+        tools=["file_reader", "image_processor"],
+        
+        config=SubscriptionConfig(
+            # Consumer settings
+            consumer_count=3,              # Number of parallel consumers
+            
+            # Retry settings
+            reclaim_idle_ms=300000,        # 5 minutes
+            dlq_retry_limit=3,             # Max retries before DLQ
+            
+            # Advanced (rarely changed)
+            group_name=None,               # Auto-generated if None
+            consumer_name=None,            # Auto-generated if None
+        ),
+    )
+)
+```
+
+### Parameter Details
+
+#### `consumer_count` (Optional)
+
+**What:** Number of parallel consumers for this agent  
+**Default:** `1`  
+**Range:** `1` to `100+`
+
+**When to increase:**
+- ✅ High message volume
+- ✅ Fast processing (< 1 second per message)
+- ✅ Want higher throughput
+
+**When to keep low:**
+- ✅ Low message volume
+- ✅ Slow processing (> 10 seconds per message)
+- ✅ External rate limits
+
+**Examples:**
+```python
+# Low traffic (default)
+consumer_count=1
+
+# Medium traffic
+consumer_count=3
+
+# High traffic
+consumer_count=10
+
+# Very high traffic
+consumer_count=50
+```
+
+**Effect:**
+```
+consumer_count=1  → 1 message processed at a time
+consumer_count=3  → 3 messages processed in parallel
+consumer_count=10 → 10 messages processed in parallel
+```
+
+#### `reclaim_idle_ms` (Optional)
+
+**What:** How long (milliseconds) before reclaiming a stuck message  
+**Default:** `180000` (3 minutes)  
+**Range:** `1000` (1 second) to `3600000` (1 hour)
+
+**How it works:**
+- Message delivered to consumer
+- If not acknowledged within `reclaim_idle_ms`
+- Message reclaimed by another consumer
+
+**When to decrease:**
+- ✅ Fast tasks (< 1 minute)
+- ✅ Want quick failure recovery
+- ⚠️ Be careful not to reclaim in-progress tasks!
+
+**When to increase:**
+- ✅ Slow tasks (> 5 minutes)
+- ✅ External API calls with delays
+- ✅ Avoid premature reclaiming
+
+**Examples:**
+```python
+# Fast tasks (30 seconds)
+reclaim_idle_ms=30000
+
+# Medium tasks (5 minutes - default)
+reclaim_idle_ms=300000
+
+# Slow tasks (15 minutes)
+reclaim_idle_ms=900000
+
+# Very slow tasks (1 hour)
+reclaim_idle_ms=3600000
+```
+
+**Formula:**
+```
+reclaim_idle_ms = (avg_processing_time × 2) + buffer
+
+Example:
+  avg_processing_time = 2 minutes (120s)
+  reclaim_idle_ms = (120 × 2) + 60 = 300 seconds = 300000 ms
+```
+
+#### `dlq_retry_limit` (Optional)
+
+**What:** Max retries before sending to Dead Letter Queue  
+**Default:** `3`  
+**Range:** `0` (no retries) to `10+`
+
+**How it works:**
+- Message fails processing
+- Retry #1
+- Retry #2
+- Retry #3
+- After `dlq_retry_limit` failures → DLQ
+
+**When to increase:**
+- ✅ Transient errors common (network issues, rate limits)
+- ✅ External services flaky
+- ✅ Safe to retry (idempotent operations)
+
+**When to decrease:**
+- ✅ Permanent errors (bad data)
+- ✅ Not idempotent (risky to retry)
+- ✅ Want faster DLQ detection
+
+**Examples:**
+```python
+# No retries (permanent errors)
+dlq_retry_limit=0
+
+# Few retries (default)
+dlq_retry_limit=3
+
+# More retries (transient errors)
+dlq_retry_limit=10
+
+# Many retries (very flaky services)
+dlq_retry_limit=20
+```
+
+**Total attempts:**
+```
+dlq_retry_limit=3 → 1 initial + 3 retries = 4 total attempts
+```
+
+---
+
+## Backend-Specific Configuration
+
+### Redis Streams (Event Bus)
+
+**Default Configuration (in code):**
+```python
+class RedisStreamEventBus:
+    def __init__(
+        self,
+        redis_url: str = "redis://localhost:6379",
+        default_maxlen: int = 10_000,              # Max messages per stream
+        reclaim_interval: int = 30,                 # Reclaim check interval (seconds)
+        default_reclaim_idle_ms: int = 180_000,     # Message idle time (3 min)
+        default_dlq_retry_limit: int = 3,           # Max retries
+    ):
+```
+
+**Tuning:**
+
+**`default_maxlen`** (Stream trimming)
+- **Default:** 10,000 messages
+- **Low traffic:** 1,000
+- **High traffic:** 100,000+
+- **Effect:** Older messages trimmed automatically
+
+**`reclaim_interval`** (How often to check for stuck messages)
+- **Default:** 30 seconds
+- **Fast recovery:** 10 seconds
+- **Low overhead:** 60 seconds
+- **Effect:** How quickly stuck messages are detected
+
+### Redis Storage
+
+**Configuration via environment:**
+```bash
+STORAGE_BACKEND=redis
+REDIS_URL=redis://localhost:6379
+REDIS_KEY_PREFIX=omni
+```
+
+**Redis Persistence (in redis.conf):**
+```conf
+# AOF (Append-Only File) - Recommended for production
+appendonly yes
+appendfsync everysec  # fsync every second (balanced)
+
+# RDB (Snapshot) - Optional backup
+save 900 1      # After 900 sec if ≥1 key changed
+save 300 10     # After 300 sec if ≥10 keys changed
+save 60 10000   # After 60 sec if ≥10000 keys changed
+```
+
+**Memory Management:**
+```conf
+# Max memory (e.g., 2GB)
+maxmemory 2gb
+
+# Eviction policy (don't evict - fail writes instead)
+maxmemory-policy noeviction
+```
+
+### JSON Storage
+
+**Configuration:**
+```bash
+STORAGE_BACKEND=json
+JSON_STORAGE_DIR=.omnidaemon_data
+```
+
+**File Permissions:**
+```bash
+# Ensure directory is writable
+chmod 755 .omnidaemon_data
+
+# Ensure files are writable
+chmod 644 .omnidaemon_data/*.json
+```
+
+**Backup:**
+```bash
+# Daily backup
+0 2 * * * tar -czf /backups/omnidaemon_$(date +\%Y\%m\%d).tar.gz .omnidaemon_data
+```
+
+---
+
+## Performance Tuning
+
+### High Throughput (1000+ messages/second)
+
+```python
+# Agent configuration
+config=SubscriptionConfig(
+    consumer_count=20,          # Many parallel consumers
+    reclaim_idle_ms=60000,      # 1 minute (fast reclaim)
+    dlq_retry_limit=2,          # Few retries (fail fast)
+)
+
+# Redis configuration
+# default_maxlen=100_000      # Keep more messages
+# reclaim_interval=10         # Check frequently
+```
+
+**Infrastructure:**
+- Use Redis with AOF fsync=everysec
+- SSD storage for Redis
+- Sufficient RAM (all data in memory)
+- Multiple agent runner instances
+
+### Low Latency (< 100ms per message)
+
+```python
+# Agent configuration
+config=SubscriptionConfig(
+    consumer_count=5,           # Moderate parallelism
+    reclaim_idle_ms=30000,      # 30 seconds
+    dlq_retry_limit=1,          # Fail fast
+)
+
+# Optimize callback
+async def fast_callback(message: dict):
+    # Avoid:
+    # - Heavy computation
+    # - Blocking I/O
+    # - External API calls
+    
+    # Use:
+    # - In-memory operations
+    # - Async I/O
+    # - Caching
+    pass
+```
+
+### High Availability
+
+```python
+# Multiple agent runners
+# Terminal 1
+python agent_runner.py
+
+# Terminal 2
+python agent_runner.py
+
+# Terminal 3
+python agent_runner.py
+```
+
+**Redis Sentinel (automatic failover):**
+```bash
+REDIS_URL=redis+sentinel://sentinel1:26379,sentinel2:26379/mymaster/0
+```
+
+**Redis Cluster (horizontal scaling):**
+```bash
+REDIS_URL=redis://node1:6379,node2:6379,node3:6379
+```
+
+### Memory Optimization
+
+```python
+# Reduce storage
+# - Lower result TTL (faster expiration)
+# - Trim metrics more aggressively
+# - Clear old data regularly
+
+# In agent callback
+async def callback(message: dict):
+    # Don't save result if not needed
+    return None  # Result not saved
+
+# Clear old data (cron)
+0 2 * * * omnidaemon storage clear-results
+0 3 * * * omnidaemon storage clear-metrics
+```
+
+---
+
+## Security Configuration
+
+### Redis Authentication
+
+```bash
+# Redis with password
+REDIS_URL=redis://:strong_password_here@redis:6379
+
+# Redis with username (Redis 6+)
+REDIS_URL=redis://username:password@redis:6379
+```
+
+### Redis TLS/SSL
+
+```bash
+# Enable TLS (note: rediss://)
+REDIS_URL=rediss://redis:6380
+
+# With password
+REDIS_URL=rediss://:password@redis:6380
+```
+
+**Redis server configuration (redis.conf):**
+```conf
+# Enable TLS
+tls-port 6380
+tls-cert-file /path/to/redis.crt
+tls-key-file /path/to/redis.key
+tls-ca-cert-file /path/to/ca.crt
+```
+
+### API Security
+
+```python
+# In production, use reverse proxy (nginx) with:
+# - HTTPS/TLS
+# - Authentication (API keys, JWT)
+# - Rate limiting
+# - IP whitelisting
+
+# Example nginx config
+server {
+    listen 443 ssl;
+    server_name api.example.com;
+    
+    ssl_certificate /path/to/cert.pem;
+    ssl_certificate_key /path/to/key.pem;
+    
+    location / {
+        proxy_pass http://127.0.0.1:8765;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+```
+
+### Environment Variable Security
+
+```bash
+# Use secrets management (Kubernetes, AWS Secrets Manager, HashiCorp Vault)
+
+# Don't commit .env to git
+echo ".env" >> .gitignore
+
+# Use read-only permissions
+chmod 400 .env
+
+# Or use environment variables directly (no .env file)
+export REDIS_URL="redis://:password@redis:6379"
+export STORAGE_BACKEND="redis"
+```
+
+---
+
+## Configuration Best Practices
+
+### 1. Environment-Specific Configs
+
+```
+config/
+├── .env.development
+├── .env.staging
+└── .env.production
+
+# Load appropriate config
+cp config/.env.production .env
+```
+
+### 2. Configuration Validation
+
+```python
+# Validate on startup
+from decouple import config
+
+def validate_config():
+    required = ["EVENT_BUS_TYPE", "STORAGE_BACKEND"]
+    
+    for var in required:
+        try:
+            value = config(var)
+            if not value:
+                raise ValueError(f"{var} is empty")
+        except Exception as e:
+            print(f"❌ Missing required config: {var}")
+            raise SystemExit(1)
+    
+    print("✅ Configuration valid")
+
+validate_config()
+```
+
+### 3. Configuration Documentation
+
+```bash
+# Create .env.example (no secrets)
+cat > .env.example << 'EOF'
+# Event Bus
+EVENT_BUS_TYPE=redis_stream
+REDIS_URL=redis://localhost:6379
+
+# Storage
+STORAGE_BACKEND=redis
+
+# API (optional)
+OMNIDAEMON_API_ENABLED=false
+OMNIDAEMON_API_PORT=8765
+
+# Logging
+LOG_LEVEL=INFO
+EOF
+```
+
+### 4. Configuration Testing
+
+```bash
+# Test development config
+cp .env.development .env
+python agent_runner.py  # Should work
+
+# Test staging config
+cp .env.staging .env
+python agent_runner.py  # Should work
+
+# Test production config
+cp .env.production .env
+python agent_runner.py  # Should work
+```
+
+---
+
+## Troubleshooting Configuration
+
+### Redis Connection Issues
+
+```bash
+# Test Redis connection
+redis-cli -u $REDIS_URL ping
+# Should return: PONG
+
+# Common issues:
+# 1. Wrong URL
+echo $REDIS_URL
+
+# 2. Redis not running
+sudo systemctl status redis
+
+# 3. Firewall blocking
+telnet redis-host 6379
+
+# 4. Wrong password
+redis-cli -u redis://:wrong_password@localhost:6379
+# Error: NOAUTH Authentication required
+```
+
+### Storage Issues
+
+```bash
+# JSON storage: Check directory exists and is writable
+ls -la .omnidaemon_data
+# Should show: drwxr-xr-x ... .omnidaemon_data
+
+# Redis storage: Check connection
+redis-cli -u $REDIS_URL PING
+```
+
+### API Not Starting
+
+```bash
+# Check if enabled
+echo $OMNIDAEMON_API_ENABLED
+# Should be: true
+
+# Check port not in use
+lsof -i :8765
+# Should be empty or show omnidaemon
+
+# Test API
+curl http://localhost:8765/health
+```
+
+### Environment Variables Not Loading
+
+```python
+# Debug: Print all config
+from decouple import config
+
+print(f"EVENT_BUS_TYPE: {config('EVENT_BUS_TYPE', default='NOT_SET')}")
+print(f"STORAGE_BACKEND: {config('STORAGE_BACKEND', default='NOT_SET')}")
+print(f"REDIS_URL: {config('REDIS_URL', default='NOT_SET')}")
+
+# Ensure .env is in correct location
+import os
+print(f"Current directory: {os.getcwd()}")
+print(f".env exists: {os.path.exists('.env')}")
+```
+
+---
+
+## Further Reading
+
+- **[Pluggable Architecture](../core-concepts/pluggable-architecture.md)** - Backend details
+- **[Event Bus Architecture](../core-concepts/event-bus-architecture.md)** - Redis Streams internals
+- **[Storage Architecture](../core-concepts/storage-architecture.md)** - Storage backends
+- **[Monitoring](monitoring.md)** - Production monitoring
+
+---
+
+## Summary
+
+**Essential Environment Variables:**
+```bash
+EVENT_BUS_TYPE=redis_stream
+REDIS_URL=redis://localhost:6379
+STORAGE_BACKEND=redis
+```
+
+**Key SubscriptionConfig Parameters:**
+```python
+consumer_count=3           # Parallel consumers
+reclaim_idle_ms=300000     # 5 minutes
+dlq_retry_limit=3          # Max retries
+```
+
+**Performance Tuning:**
+- High throughput → Increase consumer_count
+- Low latency → Optimize callback, use caching
+- High availability → Multiple runners, Redis Sentinel/Cluster
+- Memory optimization → Clear old data, reduce TTL
+
+**Security:**
+- Redis password/TLS
+- API behind reverse proxy with HTTPS
+- Secrets management (not .env)
+- Read-only permissions
+
+**Best Practices:**
+- Environment-specific configs
+- Validate on startup
+- Document in .env.example
+- Test all environments
+
+Configuration is the foundation of production deployment! ⚙️✨
+

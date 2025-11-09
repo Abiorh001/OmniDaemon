@@ -1,0 +1,422 @@
+# Introduction to OmniDaemon
+
+Welcome to OmniDaemon! This page will help you understand what OmniDaemon is, how it works, and whether it's the right tool for your use case.
+
+---
+
+## What is OmniDaemon?
+
+OmniDaemon is a **universal event-driven runtime engine** specifically designed for AI agents. Think of it as "Kubernetes for AI Agents" - it provides the infrastructure layer that makes AI agents autonomous, observable, and scalable.
+
+### The Simple Explanation
+
+Imagine you have AI agents that need to:
+- Run continuously in the background (not just respond to HTTP requests)
+- React to events happening across your system
+- Work together with other agents
+- Process tasks reliably (with retries if something fails)
+- Scale up when there's more work to do
+
+OmniDaemon handles all of this infrastructure for you. You just write your AI agent logic, and OmniDaemon takes care of the rest.
+
+---
+
+## Core Concepts (5-Minute Read)
+
+### 1. Event-Driven Architecture
+
+Traditional AI systems work like this:
+```
+User Request → AI Processes → Response → Done
+```
+
+OmniDaemon works like this:
+```
+Event Published → Agent Reacts → Result Stored
+                → Multiple Agents Can Listen
+                → Automatic Retries
+                → Failed Messages go to DLQ
+```
+
+**Why This Matters:**
+- Agents run autonomously (don't need someone to ask them)
+- Multiple agents can react to the same event
+- System is more resilient (failures don't break everything)
+- Easy to add new agents without changing existing ones
+
+### 2. Topics and Subscriptions
+
+Agents **subscribe** to **topics** (like email distribution lists):
+
+```python
+# Agent registers: "I want to handle 'file.uploaded' events"
+await sdk.register_agent(
+    agent_config=AgentConfig(
+        topic="file.uploaded",  # The topic to listen to
+        callback=my_agent,      # The function to run
+    )
+)
+```
+
+When someone **publishes** an event to that topic:
+
+```python
+# Publisher sends: "A file was uploaded"
+await sdk.publish_task(
+    event_envelope=EventEnvelope(
+        topic="file.uploaded",
+        payload=PayloadBase(
+            content={"filename": "document.pdf", "size": 1024}
+        ),
+    )
+)
+```
+
+The agent automatically receives and processes it!
+
+### 3. Agent Runners
+
+An **agent runner** is your Python script that:
+1. Registers one or more agents
+2. Starts listening for events
+3. Runs until you stop it (Ctrl+C)
+
+```python
+# This is an agent runner
+import asyncio
+from omnidaemon import OmniDaemonSDK
+
+sdk = OmniDaemonSDK()
+
+async def my_agent(message: dict):
+    # Your AI agent logic here
+    return {"status": "processed"}
+
+async def main():
+    await sdk.register_agent(...)
+    await sdk.start()
+    
+    try:
+        while True:
+            await asyncio.sleep(1)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        await sdk.shutdown()
+
+asyncio.run(main())
+```
+
+### 4. The Event Bus
+
+The **event bus** is like a highway for messages. It:
+- Delivers events from publishers to agents
+- Ensures messages aren't lost
+- Handles retries if agents fail
+- Load balances across multiple agent instances
+
+Currently, OmniDaemon uses **Redis Streams** as the event bus, but it's pluggable - you can swap in Kafka, RabbitMQ, or NATS in the future (just change an environment variable!).
+
+### 5. Storage
+
+OmniDaemon stores:
+- **Agent Registry**: Which agents are registered
+- **Results**: Outputs from your agents (kept for 24 hours)
+- **Metrics**: How many tasks processed, failed, timing info
+- **Configuration**: System settings
+
+Storage is also pluggable - use JSON files for development, Redis for production, or PostgreSQL/MongoDB in the future.
+
+### 6. Consumer Groups
+
+When you run multiple instances of the same agent (for scaling), they form a **consumer group**:
+
+```
+Event Published → Event Bus
+                    ↓
+         ┌──────────┼──────────┐
+         ↓          ↓          ↓
+    Agent #1   Agent #2   Agent #3
+  (Same code)(Same code)(Same code)
+```
+
+The event bus automatically distributes work across all instances. Only ONE instance processes each event (no duplication!).
+
+### 7. Dead Letter Queue (DLQ)
+
+If an agent fails repeatedly (default: 3 retries), the message goes to the **DLQ**:
+
+```
+Agent Fails → Retry #1 → Fails again → Retry #2 → Fails again → DLQ
+```
+
+You can inspect the DLQ to see what went wrong:
+
+```bash
+omnidaemon bus dlq --topic file.uploaded
+```
+
+---
+
+## When to Use OmniDaemon
+
+### ✅ Great For
+
+**1. Background AI Processing**
+```
+Example: User uploads document → AI agent extracts text, 
+         analyzes sentiment, generates summary
+Why: Runs in background, can take minutes, doesn't block user
+```
+
+**2. Event-Driven Workflows**
+```
+Example: Order placed → Payment agent charges card →
+         Inventory agent reserves items →
+         Shipping agent schedules delivery
+Why: Each step is independent, can be scaled separately
+```
+
+**3. Multi-Agent Systems**
+```
+Example: Research task → Researcher agent gathers info →
+         Analyzer agent processes data →
+         Writer agent creates report
+Why: Agents collaborate through events, easy to add new agents
+```
+
+**4. Long-Running AI Tasks**
+```
+Example: Train custom model → Evaluate performance →
+         Deploy if good → Notify team
+Why: Task can take hours, needs retry logic, must be reliable
+```
+
+**5. Enterprise AI Operations**
+```
+Example: 100+ agents processing customer support tickets,
+         analyzing logs, generating reports
+Why: Need observability, scaling, reliability, metrics
+```
+
+### ❌ Not Great For
+
+**1. Simple HTTP APIs**
+```
+Why not: If you just need "request → AI → response",
+         use FastAPI directly. Much simpler!
+Example: Chat endpoint where user waits for response
+```
+
+**2. Real-Time Chat**
+```
+Why not: Event bus adds latency (~50-100ms).
+         Use WebSockets/SSE for real-time chat.
+Example: ChatGPT-style interface where user sees tokens streaming
+```
+
+**3. Synchronous Request-Response**
+```
+Why not: If every request needs immediate response,
+         REST API is simpler and faster.
+Example: "Get user profile" API
+```
+
+**4. One-Off Scripts**
+```
+Why not: If you're running a script once,
+         no need for a runtime.
+Example: Data migration script
+```
+
+---
+
+## How OmniDaemon Compares
+
+| Feature | Celery | AWS Lambda | Temporal | OmniDaemon |
+|---------|--------|------------|----------|------------|
+| **Purpose** | Task queues | Serverless | Workflows | AI Agents |
+| **AI-First** | ❌ No | ❌ No | ❌ No | ✅ Yes |
+| **Event-Driven** | ✅ Yes | ⚠️ Partial | ⚠️ Partial | ✅ Yes |
+| **Setup Complexity** | 🔴 High | 🟡 Medium | 🔴 High | 🟢 Low |
+| **Framework Agnostic** | ✅ Yes | ✅ Yes | ⚠️ Partial | ✅ Yes |
+| **Horizontal Scaling** | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes |
+| **Agent Abstraction** | ❌ No | ❌ No | ❌ No | ✅ Yes |
+| **Pluggable Backends** | ⚠️ Limited | ❌ No | ❌ No | ✅ Yes |
+| **Built-in Metrics** | ⚠️ Basic | ✅ CloudWatch | ✅ Yes | ✅ Yes |
+| **DLQ** | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes |
+| **Cold Starts** | N/A | 🔴 Yes | N/A | 🟢 No |
+| **Vendor Lock-in** | 🟢 No | 🔴 Yes | ⚠️ Partial | 🟢 No |
+
+---
+
+## System Requirements
+
+### Minimum Requirements
+
+**For Development:**
+- Python 3.9 or higher
+- 4 GB RAM
+- Redis (can run in Docker)
+
+**For Production:**
+- Python 3.9 or higher
+- 8+ GB RAM (depends on number of agents)
+- Redis (recommended: 16+ GB RAM for production)
+- Linux (Ubuntu 20.04+, CentOS 7+, or similar)
+
+### Supported Platforms
+
+- ✅ **Linux** (Ubuntu, CentOS, Debian, Fedora, etc.)
+- ✅ **macOS** (Intel and Apple Silicon)
+- ✅ **Windows** (via WSL2)
+- ✅ **Docker** (any platform)
+
+### Event Bus Backends
+
+**Currently Supported:**
+- ✅ **Redis Streams** (6.0+)
+
+**Coming Soon:**
+- 🚧 **Apache Kafka** (2.8+)
+- 🚧 **RabbitMQ** (3.8+)
+- 🚧 **NATS JetStream** (2.9+)
+
+### Storage Backends
+
+**Currently Supported:**
+- ✅ **JSON** (file-based, for development)
+- ✅ **Redis** (6.0+, for production)
+
+**Coming Soon:**
+- 🚧 **PostgreSQL** (12+)
+- 🚧 **MongoDB** (4.4+)
+- 🚧 **Amazon S3** (for results storage)
+
+---
+
+## Architecture Overview
+
+Here's how OmniDaemon fits into your system:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Your Application                      │
+│  (Web App, Mobile App, Backend Services, etc.)          │
+└─────────────────────────────────────────────────────────┘
+                          │
+                          │ Publishes Events
+                          ↓
+┌─────────────────────────────────────────────────────────┐
+│                     Event Bus                            │
+│                  (Redis Streams)                         │
+└─────────────────────────────────────────────────────────┘
+                          │
+                          │ Delivers Events
+                          ↓
+┌─────────────────────────────────────────────────────────┐
+│                  OmniDaemon Runtime                      │
+│                                                          │
+│  ┌────────────┐  ┌────────────┐  ┌────────────┐        │
+│  │  Agent 1   │  │  Agent 2   │  │  Agent 3   │        │
+│  │ (OmniCore) │  │(Google ADK)│  │ (LangChain)│        │
+│  └────────────┘  └────────────┘  └────────────┘        │
+│                                                          │
+└─────────────────────────────────────────────────────────┘
+                          │
+                          │ Stores Results
+                          ↓
+┌─────────────────────────────────────────────────────────┐
+│                      Storage                             │
+│           (Redis or PostgreSQL or MongoDB)               │
+└─────────────────────────────────────────────────────────┘
+```
+
+---
+
+## What Makes OmniDaemon Different?
+
+### 1. AI-First Design
+
+OmniDaemon was built specifically for AI agents, not adapted from general task queues.
+
+**This means:**
+- First-class support for any AI framework
+- Built-in patterns for agent collaboration
+- Optimized for long-running AI tasks
+- Metrics and observability for AI workloads
+
+### 2. Pluggable Everything
+
+Swap backends without changing code:
+
+```bash
+# Development: JSON + Redis
+STORAGE_BACKEND=json
+EVENT_BUS_TYPE=redis_stream
+
+# Production: PostgreSQL + Kafka  
+STORAGE_BACKEND=postgresql
+EVENT_BUS_TYPE=kafka
+```
+
+No vendor lock-in. Your code stays the same!
+
+### 3. Framework Agnostic
+
+Use ANY AI framework:
+- OmniCore Agent
+- Google ADK
+- LangChain
+- AutoGen
+- CrewAI
+- LlamaIndex
+- Or plain Python functions!
+
+```python
+# Works with any framework
+async def my_agent(message: dict):
+    # Use YOUR AI framework here
+    result = await your_ai_framework.process(message)
+    return result
+```
+
+### 4. Production Ready
+
+Built-in:
+- ✅ Automatic retries
+- ✅ Dead letter queue
+- ✅ Metrics tracking
+- ✅ Health checks
+- ✅ Horizontal scaling
+- ✅ Beautiful CLI
+- ✅ REST API
+- ✅ Graceful shutdown
+
+### 5. Developer Experience
+
+- 📖 Clear documentation (you're reading it!)
+- 🎨 Beautiful CLI with Rich
+- 🔍 Easy debugging
+- 📊 Real-time metrics
+- 🚀 Quick to get started
+
+---
+
+## Next Steps
+
+Ready to dive in?
+
+1. **[Quick Start Tutorial](quick-start.md)** - Build your first agent in 10 minutes
+2. **[Core Concepts](../core-concepts/event-driven-architecture.md)** - Deep dive into EDA
+3. **[Complete Examples](../examples/omnicore-agent.md)** - See real-world implementations
+
+---
+
+## Questions?
+
+- 📖 [Get Support](../community/support.md)
+- 💬 [Join Discussions](https://github.com/omnirexflora-labs/OmniDaemon/discussions)
+- 🐛 [Report Issues](https://github.com/omnirexflora-labs/OmniDaemon/issues)
+- 📧 [Contact Support](../community/support.md)
+

@@ -9,6 +9,10 @@ class PayloadBase(BaseModel):
     webhook: Optional[str] = Field(
         None, description="Optional webhook URL for callbacks."
     )
+    reply_to: Optional[str] = Field(
+        None,
+        description="Optional topic that should publish the final response to.",
+    )
 
 
 class EventEnvelope(BaseModel):
@@ -16,9 +20,7 @@ class EventEnvelope(BaseModel):
         default_factory=lambda: str(uuid.uuid4()),
         description="Globally unique event ID (UUID4).",
     )
-    topic: Optional[str] = Field(
-        None, description="Event topic (e.g., 'file_system.tasks')."
-    )
+    topic: str = Field(..., description="Event topic (e.g., 'file_system.tasks').")
     payload: PayloadBase = Field(..., description="Business payload.")
     tenant_id: Optional[str] = Field(
         None, description="Tenant identifier for multi-tenancy isolation."
@@ -39,13 +41,9 @@ class EventEnvelope(BaseModel):
     causation_id: Optional[str] = Field(
         None, description="ID of the event/command that caused this event."
     )
-    source: str = Field(
-        default="unknown",
+    source: Optional[str] = Field(
+        None,
         description="Service or component that published this event (e.g., 'web-api', 'scheduler').",
-    )
-    meta: Dict[str, Any] = Field(
-        default_factory=dict,
-        description="Arbitrary metadata (e.g., user_id, trace_id, flags).",
     )
 
     @field_validator("topic")
@@ -82,7 +80,7 @@ class AgentConfig(BaseModel):
         description="Unique name for the agent.",
     )
     topic: str = Field(..., description="Topic to which the agent subscribes.")
-    callback: Callable[[Dict[str, Any]], Awaitable[Any]] = Field(
+    callback: Callable = Field(
         ..., description="Async function to handle incoming messages."
     )
     tools: Optional[list[str]] = Field(

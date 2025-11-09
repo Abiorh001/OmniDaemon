@@ -14,7 +14,7 @@ class BaseEventBus(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def publish(self, event_payload: Dict[str, Any]) -> None:
+    async def publish(self, event_payload: Dict[str, Any]) -> str:
         raise NotImplementedError
 
     @abstractmethod
@@ -28,7 +28,13 @@ class BaseEventBus(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def unsubscribe(self, topic: str) -> None:
+    async def unsubscribe(
+        self,
+        topic: str,
+        agent_name: str,
+        delete_group: bool = False,
+        delete_dlq: bool = False,
+    ) -> None:
         raise NotImplementedError
 
     @abstractmethod

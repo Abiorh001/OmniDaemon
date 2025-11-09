@@ -1,0 +1,1199 @@
+# CLI Reference
+
+Complete command-line interface reference for OmniDaemon.
+
+---
+
+## Overview
+
+The **OmniDaemon CLI** provides a beautiful, enterprise-grade interface for managing agents, monitoring events, and debugging issues.
+
+**Command Prefix:**
+```bash
+omnidaemon [COMMAND] [SUBCOMMAND] [OPTIONS]
+```
+
+**Main Commands:**
+- `health` - System health status
+- `agent` - Agent management
+- `task` - Task operations
+- `bus` - Event bus monitoring (Redis Streams)
+- `metrics` - Performance metrics
+- `storage` - Storage operations
+- `config` - Configuration management
+
+---
+
+## Installation
+
+### Recommended: Using uv (Fast & Modern)
+
+```bash
+# Install uv (if not already installed)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# From PyPI
+uv add omnidaemon
+
+# From source
+git clone https://github.com/abiorh001/OmniDaemon.git
+cd OmniDaemon
+uv venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+uv sync
+
+# Verify installation
+omnidaemon --version
+```
+
+### Alternative: Using pip
+
+```bash
+# From PyPI
+pip install omnidaemon
+
+# From source
+git clone https://github.com/abiorh001/OmniDaemon.git
+cd OmniDaemon
+pip install -e .
+
+# Verify installation
+omnidaemon --version
+```
+
+---
+
+## Global Options
+
+```bash
+--help, -h     Show help message
+--version      Show version
+```
+
+**Example:**
+```bash
+omnidaemon --help
+omnidaemon agent --help
+omnidaemon agent list --help
+```
+
+---
+
+## Health Command
+
+### `omnidaemon health`
+
+Check system health and status.
+
+**Usage:**
+```bash
+omnidaemon health [OPTIONS]
+```
+
+**Options:**
+- `--format TEXT` - Output format: `rich` (default), `json`
+
+**Output (rich):**
+```
+╔══════════════════════════════════════════════════════════╗
+║              📊 OmniDaemon Health Status                ║
+╚══════════════════════════════════════════════════════════╝
+
+System Status: ● RUNNING
+Runner ID: runner-abc-123
+Uptime: 2.5 hours
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                      🔌 Connections                      
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Event Bus:  ✓ Healthy (redis_stream)
+Storage:    ✓ Healthy (redis)
+
+✓ System operational and healthy
+```
+
+**Output (json):**
+```bash
+omnidaemon health --format json
+```
+
+```json
+{
+  "status": "RUNNING",
+  "runner": {
+    "id": "runner-abc-123",
+    "uptime": 9000.5,
+    "running": true
+  },
+  "event_bus": {
+    "type": "redis_stream",
+    "status": "healthy"
+  },
+  "storage": {
+    "backend": "redis",
+    "status": "healthy"
+  }
+}
+```
+
+**Status Values:**
+- `RUNNING` - Runner active, all systems healthy
+- `READY` - No runner, but event bus and storage healthy
+- `DEGRADED` - One system unhealthy
+- `DOWN` - Both event bus and storage unhealthy
+
+**Use Cases:**
+- Health monitoring
+- Kubernetes liveness probes
+- Load balancer health checks
+- CI/CD health gates
+
+---
+
+## Agent Commands
+
+### `omnidaemon agent list`
+
+List all registered agents.
+
+**Usage:**
+```bash
+omnidaemon agent list [OPTIONS]
+```
+
+**Options:**
+- `--format TEXT` - Output format: `tree` (default), `table`, `compact`, `json`
+
+**Output (tree):**
+```
+╔══════════════════════════════════════════════════════════╗
+║                 🤖 Registered Agents                    ║
+╚══════════════════════════════════════════════════════════╝
+
+📂 file_system.tasks
+   └─ OMNICOREAGENT_FILESYSTEM_AGENT
+      ├─ Callback: call_file_system_agent
+      ├─ Consumers: 3
+      └─ Config: reclaim=6000ms, retries=3
+
+📂 analysis.tasks
+   └─ ANALYZER_AGENT
+      ├─ Callback: analyze_data
+      ├─ Consumers: 1
+      └─ Config: reclaim=300000ms, retries=5
+
+✓ 2 agents across 2 topics
+```
+
+**Output (table):**
+```bash
+omnidaemon agent list --format table
+```
+
+```
+Topic              Agent                          Callback              Consumers
+────────────────────────────────────────────────────────────────────────────────
+file_system.tasks  OMNICOREAGENT_FILESYSTEM_AGENT call_file_system_agent    3
+analysis.tasks     ANALYZER_AGENT                 analyze_data             1
+```
+
+**Output (json):**
+```bash
+omnidaemon agent list --format json
+```
+
+```json
+{
+  "file_system.tasks": [
+    {
+      "name": "OMNICOREAGENT_FILESYSTEM_AGENT",
+      "callback": "call_file_system_agent",
+      "description": "Processes file system operations",
+      "config": {
+        "consumer_count": 3,
+        "reclaim_idle_ms": 6000,
+        "dlq_retry_limit": 3
+      }
+    }
+  ]
+}
+```
+
+---
+
+### `omnidaemon agent get`
+
+Get detailed information about a specific agent.
+
+**Usage:**
+```bash
+omnidaemon agent get --topic TOPIC --name NAME [OPTIONS]
+```
+
+**Options:**
+- `--topic, -t TEXT` - Topic name (required)
+- `--name, -n TEXT` - Agent name (required)
+- `--format TEXT` - Output format: `rich` (default), `json`
+
+**Example:**
+```bash
+omnidaemon agent get --topic file_system.tasks --name OMNICOREAGENT_FILESYSTEM_AGENT
+```
+
+**Output:**
+```
+╔══════════════════════════════════════════════════════════╗
+║                   🤖 Agent Details                      ║
+╚══════════════════════════════════════════════════════════╝
+
+Name:        OMNICOREAGENT_FILESYSTEM_AGENT
+Topic:       file_system.tasks
+Callback:    call_file_system_agent
+Description: Processes file system operations
+
+Configuration:
+  └─ reclaim_idle_ms:   6000
+  └─ dlq_retry_limit:   3
+  └─ consumer_count:    3
+
+Tools:
+  • file_reader
+  • file_writer
+
+Created: 2025-11-09 10:30:45
+```
+
+---
+
+### `omnidaemon agent delete`
+
+Delete an agent permanently.
+
+**Usage:**
+```bash
+omnidaemon agent delete --topic TOPIC --name NAME [OPTIONS]
+```
+
+**Options:**
+- `--topic, -t TEXT` - Topic name (required)
+- `--name, -n TEXT` - Agent name (required)
+- `--delete-group` - Delete consumer group (default: True)
+- `--delete-dlq` - Delete dead-letter queue (default: False)
+- `--yes, -y` - Skip confirmation
+
+**Example:**
+```bash
+# Simple delete (keeps DLQ)
+omnidaemon agent delete --topic file_system.tasks --name OLD_AGENT
+
+# Complete cleanup
+omnidaemon agent delete \
+  --topic file_system.tasks \
+  --name OLD_AGENT \
+  --delete-group \
+  --delete-dlq \
+  --yes
+```
+
+**Output:**
+```
+⚠ WARNING: This will permanently delete the agent!
+   Topic: file_system.tasks
+   Agent: OLD_AGENT
+   
+Delete consumer group? Yes
+Delete DLQ? No
+
+Proceed? [y/N]: y
+
+✓ Agent deleted successfully
+```
+
+---
+
+### `omnidaemon agent unsubscribe`
+
+Temporarily pause an agent (can resume by restarting runner).
+
+**Usage:**
+```bash
+omnidaemon agent unsubscribe --topic TOPIC --name NAME
+```
+
+**Options:**
+- `--topic, -t TEXT` - Topic name (required)
+- `--name, -n TEXT` - Agent name (required)
+
+**Example:**
+```bash
+omnidaemon agent unsubscribe --topic file_system.tasks --name FILE_PROCESSOR
+```
+
+**Output:**
+```
+⏸ Pausing agent...
+
+✓ Agent unsubscribed (paused)
+  
+  To resume: restart the agent runner
+  Consumer group and DLQ preserved
+```
+
+---
+
+## Task Commands
+
+### `omnidaemon task publish`
+
+Publish an event to a topic.
+
+**Usage:**
+```bash
+omnidaemon task publish --topic TOPIC --content JSON [OPTIONS]
+```
+
+**Options:**
+- `--topic, -t TEXT` - Topic name (required)
+- `--content, -c TEXT` - Content JSON (required)
+- `--webhook TEXT` - Webhook URL for result callback
+- `--reply-to TEXT` - Topic to reply to
+- `--correlation-id TEXT` - Correlation ID
+- `--tenant-id TEXT` - Tenant ID
+
+**Example:**
+```bash
+omnidaemon task publish \
+  --topic file_system.tasks \
+  --content '{"action": "list_files", "path": "/home"}'
+
+omnidaemon task publish \
+  --topic file_system.tasks \
+  --content '{"action": "upload"}' \
+  --webhook "https://api.example.com/callback" \
+  --correlation-id "req-123"
+```
+
+**Output:**
+```
+📨 Publishing task...
+
+✓ Task published
+  Task ID: 550e8400-e29b-41d4-a716-446655440000
+  Topic: file_system.tasks
+  
+  To get result:
+    omnidaemon task get --task-id 550e8400-e29b-41d4-a716-446655440000
+```
+
+---
+
+### `omnidaemon task get`
+
+Get result for a published task.
+
+**Usage:**
+```bash
+omnidaemon task get --task-id ID [OPTIONS]
+```
+
+**Options:**
+- `--task-id TEXT` - Task ID (required)
+- `--wait INTEGER` - Wait time in seconds (default: 0)
+- `--format TEXT` - Output format: `rich` (default), `json`
+
+**Example:**
+```bash
+# Immediate check
+omnidaemon task get --task-id 550e8400-...
+
+# Wait for result (30 seconds)
+omnidaemon task get --task-id 550e8400-... --wait 30
+```
+
+**Output (found):**
+```
+╔══════════════════════════════════════════════════════════╗
+║                    📋 Task Result                       ║
+╚══════════════════════════════════════════════════════════╝
+
+Task ID: 550e8400-e29b-41d4-a716-446655440000
+Status:  ✓ Complete
+
+Result:
+{
+  "status": "success",
+  "files": ["file1.txt", "file2.pdf"],
+  "processed_at": 1699456789.012
+}
+```
+
+**Output (not found):**
+```
+❌ Result not found
+
+Possible reasons:
+  • Task not processed yet
+  • Result expired (> 24 hours)
+  • Agent returned None
+  • Task failed (check DLQ)
+```
+
+---
+
+### `omnidaemon task list`
+
+List recent task results.
+
+**Usage:**
+```bash
+omnidaemon task list [OPTIONS]
+```
+
+**Options:**
+- `--limit INTEGER` - Max results (default: 100)
+- `--format TEXT` - Output format: `table` (default), `json`
+
+**Example:**
+```bash
+omnidaemon task list --limit 20
+```
+
+**Output:**
+```
+╔══════════════════════════════════════════════════════════╗
+║                 📋 Recent Task Results                  ║
+╚══════════════════════════════════════════════════════════╝
+
+Task ID                               Topic              Status    Saved At
+──────────────────────────────────────────────────────────────────────────────
+550e8400-e29b-41d4-a716-446655440000  file_system.tasks  Success   10:30:45
+661f9511-f30c-52e5-b827-557766551111  analysis.tasks     Success   10:29:12
+...
+```
+
+---
+
+## Event Bus Commands
+
+(Only available when `EVENT_BUS_TYPE=redis_stream`)
+
+### `omnidaemon bus list`
+
+List all Redis streams.
+
+**Usage:**
+```bash
+omnidaemon bus list
+```
+
+**Output:**
+```
+╔══════════════════════════════════════════════════════════╗
+║                  📊 Streams Overview                    ║
+╚══════════════════════════════════════════════════════════╝
+
+Stream                    Messages
+─────────────────────────────────
+file_system.tasks            1,523
+analysis.tasks                 450
+notifications                  125
+─────────────────────────────────
+
+✓ 3 active streams
+```
+
+---
+
+### `omnidaemon bus inspect`
+
+View recent messages in a stream.
+
+**Usage:**
+```bash
+omnidaemon bus inspect --stream STREAM [OPTIONS]
+```
+
+**Options:**
+- `--stream, -s TEXT` - Stream name (required)
+- `--limit, -n INTEGER` - Number of messages (default: 10)
+
+**Example:**
+```bash
+omnidaemon bus inspect --stream file_system.tasks --limit 5
+```
+
+**Output:**
+```
+╔══════════════════════════════════════════════════════════╗
+║         📨 Recent Messages: file_system.tasks           ║
+╚══════════════════════════════════════════════════════════╝
+
+Message ID: 1699456789012-0
+{
+  "content": "List all files",
+  "correlation_id": "req-123",
+  "delivery_attempts": 0,
+  "created_at": 1699456789.012
+}
+
+Message ID: 1699456788001-0
+{
+  "content": "Upload file",
+  "correlation_id": "req-122",
+  "delivery_attempts": 1,
+  "created_at": 1699456788.001
+}
+
+Showing 5 most recent messages
+```
+
+---
+
+### `omnidaemon bus groups`
+
+List consumer groups for a stream.
+
+**Usage:**
+```bash
+omnidaemon bus groups --stream STREAM
+```
+
+**Options:**
+- `--stream, -s TEXT` - Stream name (required)
+
+**Example:**
+```bash
+omnidaemon bus groups --stream file_system.tasks
+```
+
+**Output:**
+```
+╔══════════════════════════════════════════════════════════╗
+║        👥 Consumer Groups: file_system.tasks            ║
+╚══════════════════════════════════════════════════════════╝
+
+Group                                    Consumers  Pending
+────────────────────────────────────────────────────────────
+group:file_system.tasks:OMNICORE_AGENT        3         2
+group:file_system.tasks:BACKUP_AGENT          1         0
+────────────────────────────────────────────────────────────
+
+✓ 2 consumer groups
+```
+
+---
+
+### `omnidaemon bus dlq`
+
+Inspect dead-letter queue for a topic.
+
+**Usage:**
+```bash
+omnidaemon bus dlq --topic TOPIC [OPTIONS]
+```
+
+**Options:**
+- `--topic, -t TEXT` - Topic name (required)
+- `--limit, -n INTEGER` - Number of entries (default: 10)
+
+**Example:**
+```bash
+omnidaemon bus dlq --topic file_system.tasks --limit 20
+```
+
+**Output:**
+```
+╔══════════════════════════════════════════════════════════╗
+║                   💀 DLQ Entries                        ║
+╚══════════════════════════════════════════════════════════╝
+
+Message ID: 1699456789012-0
+{
+  "topic": "file_system.tasks",
+  "original_id": "1699456789012-0",
+  "failed_message": {
+    "content": "Corrupt data",
+    "correlation_id": "req-123"
+  },
+  "error": "Max retries (3) exceeded",
+  "retry_count": 3,
+  "failed_at": 1699456799.012
+}
+
+ℹ 1 entry in DLQ
+```
+
+---
+
+### `omnidaemon bus stats`
+
+Get comprehensive event bus statistics.
+
+**Usage:**
+```bash
+omnidaemon bus stats
+```
+
+**Output:**
+```
+╔══════════════════════════════════════════════════════════╗
+║              📊 Event Bus Statistics                    ║
+╚══════════════════════════════════════════════════════════╝
+
+Streams:         3
+Consumer Groups: 5
+Total Messages:  2,098
+DLQ Entries:     12
+
+Memory Usage:    2.3 MB
+Connected Clients: 4
+Redis Version:   7.0.12
+
+✓ Event bus operational
+```
+
+---
+
+## Metrics Command
+
+### `omnidaemon metrics`
+
+View performance metrics for all agents.
+
+**Usage:**
+```bash
+omnidaemon metrics [OPTIONS]
+```
+
+**Options:**
+- `--topic, -t TEXT` - Filter by topic
+- `--format TEXT` - Output format: `table` (default), `json`
+
+**Output (table):**
+```
+╔══════════════════════════════════════════════════════════╗
+║                  📊 Performance Metrics                 ║
+╚══════════════════════════════════════════════════════════╝
+
+Topic                 Agent             Received  Processed  Failed  Avg Time
+─────────────────────────────────────────────────────────────────────────────
+file_system.tasks    OMNICORE_AGENT         150        145       5   1.35s
+analysis.tasks       ANALYZER_AGENT          50         48       2   0.85s
+─────────────────────────────────────────────────────────────────────────────
+TOTAL                                       200        193       7   1.10s
+
+Success Rate: 96.5%
+Total Processing Time: 212.3s
+```
+
+**Output (filtered):**
+```bash
+omnidaemon metrics --topic file_system.tasks
+```
+
+**Output (json):**
+```bash
+omnidaemon metrics --format json
+```
+
+```json
+{
+  "file_system.tasks": {
+    "OMNICORE_AGENT": {
+      "received": 150,
+      "processed": 145,
+      "failed": 5,
+      "avg_processing_time_ms": 1350.5
+    }
+  }
+}
+```
+
+---
+
+## Storage Commands
+
+### `omnidaemon storage health`
+
+Check storage health.
+
+**Usage:**
+```bash
+omnidaemon storage health [OPTIONS]
+```
+
+**Options:**
+- `--format TEXT` - Output format: `rich` (default), `json`
+
+**Output (Redis):**
+```
+╔══════════════════════════════════════════════════════════╗
+║               💾 Storage Health Status                  ║
+╚══════════════════════════════════════════════════════════╝
+
+Backend:        redis
+Status:         ✓ Healthy
+URL:            redis://localhost:6379
+Latency:        0.85 ms
+
+Redis Info:
+  └─ Version:   7.0.12
+  └─ Memory:    15.2 MB used
+  └─ Clients:   4 connected
+
+Data Counts:
+  └─ Agents:    8
+  └─ Results:   156
+  └─ Metrics:   2,450
+
+✓ Storage operational
+```
+
+---
+
+### `omnidaemon storage clear-agents`
+
+Delete all agents from storage.
+
+**Usage:**
+```bash
+omnidaemon storage clear-agents [OPTIONS]
+```
+
+**Options:**
+- `--yes, -y` - Skip confirmation
+
+**Example:**
+```bash
+omnidaemon storage clear-agents --yes
+```
+
+**Output:**
+```
+⚠ WARNING: This will delete all agents from storage!
+          Consumer groups in Redis will NOT be deleted.
+
+Proceed? [y/N]: y
+
+✓ Deleted 8 agents
+```
+
+---
+
+### `omnidaemon storage clear-results`
+
+Delete all task results from storage.
+
+**Usage:**
+```bash
+omnidaemon storage clear-results [OPTIONS]
+```
+
+**Options:**
+- `--yes, -y` - Skip confirmation
+
+**Example:**
+```bash
+omnidaemon storage clear-results --yes
+```
+
+**Output:**
+```
+✓ Deleted 156 results
+```
+
+---
+
+### `omnidaemon storage clear-metrics`
+
+Delete all metrics from storage.
+
+**Usage:**
+```bash
+omnidaemon storage clear-metrics [OPTIONS]
+```
+
+**Options:**
+- `--yes, -y` - Skip confirmation
+
+**Example:**
+```bash
+omnidaemon storage clear-metrics --yes
+```
+
+**Output:**
+```
+✓ Deleted 2,450 metrics
+```
+
+---
+
+### `omnidaemon storage clear-all`
+
+Delete all data from storage (agents, results, metrics, config).
+
+**Usage:**
+```bash
+omnidaemon storage clear-all [OPTIONS]
+```
+
+**Options:**
+- `--yes, -y` - Skip confirmation
+
+**Example:**
+```bash
+omnidaemon storage clear-all --yes
+```
+
+**Output:**
+```
+⚠ DANGER: This will delete ALL data from storage!
+          This action cannot be undone!
+
+Proceed? [y/N]: y
+
+✓ Deleted:
+  Agents:  8
+  Results: 156
+  Metrics: 2,450
+  Config:  3
+```
+
+---
+
+## Config Commands
+
+### `omnidaemon config get`
+
+Get configuration value.
+
+**Usage:**
+```bash
+omnidaemon config get KEY
+```
+
+**Example:**
+```bash
+omnidaemon config get webhook_url
+omnidaemon config get max_retries
+```
+
+**Output:**
+```
+Key: webhook_url
+Value: https://api.example.com/callback
+```
+
+---
+
+### `omnidaemon config set`
+
+Set configuration value.
+
+**Usage:**
+```bash
+omnidaemon config set KEY VALUE
+```
+
+**Example:**
+```bash
+omnidaemon config set webhook_url "https://api.example.com/callback"
+omnidaemon config set max_retries 5
+omnidaemon config set features '["ocr", "nlp"]'
+```
+
+**Output:**
+```
+✓ Configuration saved
+  Key: webhook_url
+  Value: https://api.example.com/callback
+```
+
+---
+
+### `omnidaemon config list`
+
+List all configuration values.
+
+**Usage:**
+```bash
+omnidaemon config list
+```
+
+**Output:**
+```
+╔══════════════════════════════════════════════════════════╗
+║                 ⚙️ Configuration                        ║
+╚══════════════════════════════════════════════════════════╝
+
+Key              Value
+─────────────────────────────────────────────────────────
+webhook_url      https://api.example.com/callback
+max_retries      5
+features         ["ocr", "nlp"]
+```
+
+---
+
+## JSON Output
+
+All commands support `--format json` for scripting:
+
+```bash
+# Health check
+omnidaemon health --format json | jq '.status'
+
+# Agent list
+omnidaemon agent list --format json | jq '.[] | length'
+
+# Metrics
+omnidaemon metrics --format json | jq '.["file_system.tasks"]'
+
+# Task result
+omnidaemon task get --task-id 550e8400-... --format json
+```
+
+---
+
+## Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1 | General error |
+| 2 | Invalid command/options |
+| 130 | Interrupted (Ctrl+C) |
+
+---
+
+## Environment Variables
+
+The CLI respects these environment variables:
+
+```bash
+# Event Bus
+EVENT_BUS_TYPE=redis_stream
+REDIS_URL=redis://localhost:6379
+
+# Storage
+STORAGE_BACKEND=redis
+JSON_STORAGE_DIR=.omnidaemon_data
+
+# Logging
+LOG_LEVEL=INFO
+```
+
+---
+
+## Shell Completion
+
+Enable tab completion for your shell:
+
+```bash
+# Bash
+omnidaemon --install-completion bash
+source ~/.bashrc
+
+# Zsh
+omnidaemon --install-completion zsh
+source ~/.zshrc
+
+# Fish
+omnidaemon --install-completion fish
+source ~/.config/fish/config.fish
+```
+
+---
+
+## Scripting Examples
+
+### Health Check Script
+
+```bash
+#!/bin/bash
+# Check if OmniDaemon is healthy
+
+status=$(omnidaemon health --format json | jq -r '.status')
+
+if [ "$status" = "RUNNING" ]; then
+    echo "✓ Healthy"
+    exit 0
+else
+    echo "✗ Unhealthy: $status"
+    exit 1
+fi
+```
+
+### Agent Monitoring Script
+
+```bash
+#!/bin/bash
+# Alert if agents have high failure rate
+
+metrics=$(omnidaemon metrics --format json)
+
+for topic in $(echo "$metrics" | jq -r 'keys[]'); do
+    for agent in $(echo "$metrics" | jq -r ".\"$topic\" | keys[]"); do
+        received=$(echo "$metrics" | jq -r ".\"$topic\".\"$agent\".received")
+        failed=$(echo "$metrics" | jq -r ".\"$topic\".\"$agent\".failed")
+        
+        failure_rate=$(echo "scale=2; $failed * 100 / $received" | bc)
+        
+        if (( $(echo "$failure_rate > 5" | bc -l) )); then
+            echo "⚠ High failure rate: $agent ($failure_rate%)"
+            # Send alert
+        fi
+    done
+done
+```
+
+### DLQ Check Script
+
+```bash
+#!/bin/bash
+# Check DLQ and alert
+
+topics=("file_system.tasks" "analysis.tasks")
+
+for topic in "${topics[@]}"; do
+    count=$(omnidaemon bus dlq --topic "$topic" --format json | jq 'length')
+    
+    if [ "$count" -gt 0 ]; then
+        echo "⚠ DLQ has $count entries for $topic"
+        # Send alert
+    fi
+done
+```
+
+---
+
+## Common Workflows
+
+### Deploy New Agent
+
+```bash
+# 1. Check current agents
+omnidaemon agent list
+
+# 2. Start agent runner (in background)
+python agent_runner.py &
+
+# 3. Verify registration
+omnidaemon agent list
+
+# 4. Check health
+omnidaemon health
+
+# 5. Monitor metrics
+omnidaemon metrics
+```
+
+### Debug Failed Tasks
+
+```bash
+# 1. Check metrics
+omnidaemon metrics --topic problematic_topic
+
+# 2. Inspect DLQ
+omnidaemon bus dlq --topic problematic_topic --limit 50
+
+# 3. Inspect stream
+omnidaemon bus inspect --stream problematic_topic --limit 10
+
+# 4. Check agent status
+omnidaemon agent get --topic problematic_topic --name AGENT_NAME
+```
+
+### Maintenance
+
+```bash
+# 1. Pause agent
+omnidaemon agent unsubscribe --topic file_system.tasks --name AGENT_NAME
+
+# 2. Perform maintenance
+
+# 3. Restart agent runner
+
+# 4. Verify resumed
+omnidaemon agent list
+omnidaemon metrics
+```
+
+---
+
+## Troubleshooting
+
+### Command Not Found
+
+```bash
+# Check installation
+pip show omnidaemon
+
+# Reinstall
+pip install --upgrade --force-reinstall omnidaemon
+
+# Check PATH
+which omnidaemon
+```
+
+### Connection Errors
+
+```bash
+# Check Redis
+redis-cli -u $REDIS_URL ping
+
+# Check environment variables
+echo $REDIS_URL
+echo $EVENT_BUS_TYPE
+echo $STORAGE_BACKEND
+```
+
+### Permission Errors (Storage)
+
+```bash
+# Check directory permissions
+ls -la .omnidaemon_data
+
+# Fix permissions
+chmod 755 .omnidaemon_data
+chmod 644 .omnidaemon_data/*.json
+```
+
+---
+
+## Further Reading
+
+- **[SDK API](sdk-api.md)** - Programmatic access
+- **[Monitoring Guide](../how-to-guides/monitoring.md)** - Production monitoring
+- **[Configuration Guide](../how-to-guides/configuration.md)** - Environment setup
+
+---
+
+## Summary
+
+**Main Commands:**
+```bash
+omnidaemon health              # System status
+omnidaemon agent list          # List agents
+omnidaemon agent get           # Agent details
+omnidaemon task publish        # Publish event
+omnidaemon task get            # Get result
+omnidaemon metrics             # Performance metrics
+omnidaemon bus list            # List streams
+omnidaemon bus dlq             # Inspect DLQ
+omnidaemon storage health      # Storage status
+```
+
+**Common Options:**
+- `--format json` - JSON output for scripting
+- `--help` - Show help
+- `--yes, -y` - Skip confirmations
+
+**Exit Codes:**
+- 0 = Success
+- 1 = Error
+- 130 = Interrupted
+
+The CLI provides a beautiful, production-ready interface! 🎨✨
+

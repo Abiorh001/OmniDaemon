@@ -1,0 +1,539 @@
+# Quick Start: Build Your First Agent in 10 Minutes
+
+This tutorial will get you from zero to a working AI agent in under 10 minutes. By the end, you'll have:
+
+- ✅ OmniDaemon installed and running
+- ✅ Your first agent listening for events
+- ✅ A publisher sending events
+- ✅ Results being stored and retrieved
+
+Let's go!
+
+---
+
+## Step 1: Install Event Bus & Storage Backend
+
+For this Quick Start, we'll use **Redis** (the current production-ready backend for both event bus and storage).
+
+> 💡 **OmniDaemon is pluggable!** Redis Streams is our first event bus implementation. Coming soon: Kafka, RabbitMQ, NATS. For storage, we support JSON (dev) and Redis (production), with PostgreSQL, MongoDB, and S3 planned.
+
+### macOS
+```bash
+brew install redis
+brew services start redis
+```
+
+### Ubuntu/Debian
+```bash
+sudo apt update
+sudo apt install redis-server
+sudo systemctl start redis-server
+sudo systemctl enable redis-server
+```
+
+### Windows
+```bash
+# Option 1: Using WSL (recommended)
+wsl --install
+# Then follow Ubuntu steps above
+
+# Option 2: Download installer from https://redis.io/download
+```
+
+### Docker (All Platforms - Easiest!)
+```bash
+docker run -d -p 6379:6379 --name redis redis:latest
+```
+
+**✅ Verify Event Bus is running (Redis Streams for this Quick Start):**
+```bash
+redis-cli ping
+```
+**Expected output:** `PONG`
+
+❌ **If you see "command not found" or connection error**, the event bus backend isn't running. Try the Docker method above.
+
+---
+
+## Step 2: Install OmniDaemon
+
+### Using uv (Recommended - Fast!)
+
+```bash
+# Install uv (if not already installed)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+# Or: pip install uv
+
+# Create a new project
+mkdir my-omnidaemon-project
+cd my-omnidaemon-project
+
+# Initialize project
+uv init
+
+# Create virtual environment
+uv venv
+
+# Activate environment
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install OmniDaemon
+uv add omnidaemon
+
+# Verify installation
+python -c "import omnidaemon; print('✅ OmniDaemon installed!')"
+```
+
+### Using pip (Traditional)
+
+```bash
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install OmniDaemon
+pip install omnidaemon
+
+# Verify installation
+python -c "import omnidaemon; print('✅ OmniDaemon installed!')"
+```
+
+**✅ Expected output:**
+```
+✅ OmniDaemon installed!
+```
+
+---
+
+## Step 3: Create Your First Agent
+
+Create a file called `agent_runner.py`:
+
+### SIMPLE VERSION (Required parameters only)
+
+```python
+# agent_runner.py - SIMPLE VERSION
+import asyncio
+from omnidaemon import OmniDaemonSDK, AgentConfig
+
+sdk = OmniDaemonSDK()
+
+# CALLBACK = Where your AI agent runs!
+# This function is called when a message arrives
+async def greeter(message: dict):
+    """
+    This is YOUR callback - where your logic/AI agent executes.
+    
+    For this simple example, we just return a greeting.
+    In real apps, this is where you'd call your AI agent.
+    
+    See real examples:
+    - examples/omnicoreagent/agent_runner.py (OmniCore)
+    - examples/google_adk/agent_runner.py (Google ADK)
+    """
+    content = message.get("content", {})
+    name = content.get("name", "stranger")
+    return {"reply": f"Hello, {name}! 👋"}
+
+async def main():
+    # Register agent - only topic and callback are required!
+    await sdk.register_agent(
+        agent_config=AgentConfig(
+            topic="greet.user",      # REQUIRED: Where to listen
+            callback=greeter,         # REQUIRED: Your function (where AI agent runs)
+        )
+    )
+    
+    await sdk.start()
+    print("🎧 Agent running. Press Ctrl+C to stop.")
+    
+    try:
+        while True:
+            await asyncio.sleep(1)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        await sdk.shutdown()
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+### FULL VERSION (With all optional parameters)
+
+```python
+# agent_runner.py - FULL VERSION
+import asyncio
+from omnidaemon import OmniDaemonSDK, AgentConfig, SubscriptionConfig
+
+sdk = OmniDaemonSDK()
+
+async def greeter(message: dict):
+    """Your AI agent logic"""
+    content = message.get("content", {})
+    name = content.get("name", "stranger")
+    return {"reply": f"Hello, {name}! 👋"}
+
+async def main():
+    await sdk.register_agent(
+        agent_config=AgentConfig(
+            topic="greet.user",                    # REQUIRED
+            callback=greeter,                       # REQUIRED
+            name="greeter-agent",                   # Optional (default: auto-generated)
+            description="A friendly greeting agent", # Optional
+            version="1.0.0",                        # Optional
+            tags=["greeting", "demo"],              # Optional
+            config=SubscriptionConfig(
+                max_retries=3,                      # Optional (default: 3)
+                reclaim_idle_ms=300000,             # Optional (default: 5 min)
+                dlq_enabled=True,                   # Optional (default: True)
+            )
+        )
+    )
+    
+    await sdk.start()
+    print("🎧 Agent running. Press Ctrl+C to stop.")
+    
+    try:
+        while True:
+            await asyncio.sleep(1)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        await sdk.shutdown()
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+**Parameter Defaults:**
+- `name`: Auto-generated from topic
+- `description`: None
+- `version`: "1.0.0"
+- `tags`: []
+- `config.max_retries`: 3
+- `config.reclaim_idle_ms`: 300000 (5 minutes)
+- `config.dlq_enabled`: True
+
+---
+
+## Step 4: Run Your Agent
+
+```bash
+python agent_runner.py
+```
+
+**✅ Expected output:**
+```
+[Runner abc-123] Registered agent 'greeter-agent' on topic 'greet.user'
+🎧 Agent running. Press Ctrl+C to stop.
+```
+
+**Success indicators:**
+- Shows "Registered agent" message
+- Shows "Agent running" message
+- Process doesn't exit (stays running, waiting for messages)
+
+**❌ Common errors and fixes:**
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `Connection refused [Errno 111]` | Event bus not running | Go back to Step 1, start event bus backend |
+| `ModuleNotFoundError: No module named 'omnidaemon'` | Not installed | Go back to Step 2 |
+| `ImportError: cannot import name 'OmniDaemonSDK'` | Wrong import | Try `from omnidaemon import OmniDaemonSDK` |
+
+**Keep this terminal running** - your agent is now alive and listening!
+
+---
+
+## Step 5: Publish an Event
+
+**Open a NEW terminal** (keep the agent running in the first one!) and create `publisher.py`:
+
+### SIMPLE VERSION (Required parameters only)
+
+```python
+# publisher.py - SIMPLE VERSION
+import asyncio
+from omnidaemon import OmniDaemonSDK, EventEnvelope, PayloadBase
+
+sdk = OmniDaemonSDK()
+
+async def main():
+    # SIMPLE: Only topic and content required!
+    event = EventEnvelope(
+        topic="greet.user",              # REQUIRED
+        payload=PayloadBase(
+            content={"name": "Alice"}     # REQUIRED
+        ),
+    )
+    
+    task_id = await sdk.publish_task(event_envelope=event)
+    print(f"📨 Task ID: {task_id}")
+    
+    # Wait and get result
+    await asyncio.sleep(2)
+    result = await sdk.get_result(task_id)
+    print(f"✅ Result: {result}")
+
+asyncio.run(main())
+```
+
+### FULL VERSION (With all optional parameters)
+
+```python
+# publisher.py - FULL VERSION
+import asyncio
+from omnidaemon import OmniDaemonSDK, EventEnvelope, PayloadBase
+
+sdk = OmniDaemonSDK()
+
+async def main():
+    event = EventEnvelope(
+        topic="greet.user",                     # REQUIRED
+        payload=PayloadBase(
+            content={"name": "Alice"},           # REQUIRED
+            webhook="https://api.example.com/callback",  # Optional: HTTP callback
+            reply_to="greet.response",           # Optional: Response topic
+            correlation_id="req-12345",          # Optional: Track requests
+            causation_id="event-67890",          # Optional: Event chain
+            source="web-app",                    # Optional: Event origin
+            tenant_id="tenant-abc",              # Optional: Multi-tenancy
+        ),
+    )
+    
+    task_id = await sdk.publish_task(event_envelope=event)
+    print(f"📨 Task ID: {task_id}")
+    print(f"   Correlation ID: {event.payload.correlation_id}")
+    print(f"   Source: {event.payload.source}")
+    
+    # Results auto-expire after 24 hours
+    await asyncio.sleep(2)
+    result = await sdk.get_result(task_id)
+    print(f"✅ Result: {result}")
+
+asyncio.run(main())
+```
+
+**Parameter Defaults:**
+- `webhook`: None (no HTTP callback)
+- `reply_to`: None (no response topic)
+- `correlation_id`: Auto-generated UUID
+- `causation_id`: None
+- `source`: "unknown"
+- `tenant_id`: "default"
+
+**Run it:**
+```bash
+python publisher.py
+```
+
+**✅ Expected output:**
+```
+📨 Task ID: 550e8400-e29b-41d4-a716-446655440000
+✅ Result: {'reply': 'Hello, Alice! 👋', 'status': 'success', 'task_id': '...'}
+```
+
+**In the agent terminal**, you should see:
+```
+[Agent greeter-agent] Received message on topic greet.user
+[Agent greeter-agent] Processed task in 0.05s
+```
+
+---
+
+## Step 6: Check System Health
+
+In a new terminal:
+
+```bash
+omnidaemon health
+```
+
+**✅ Expected output:**
+```
+🏥 System Health Check
+==================================================
+Status: running
+Registered Agents: 1
+Subscribed Topics: ['greet.user']
+Event Bus: RedisStreamEventBus (Pluggable - using Redis Streams)
+Storage: Healthy (Pluggable - using Redis)
+==================================================
+✅ All systems operational!
+```
+
+---
+
+## 🎉 Success! What Just Happened?
+
+You now have a **fully functional event-driven AI agent runtime**:
+
+1. ✅ **Event Bus** - Running and handling message distribution (using Redis Streams)
+2. ✅ **Storage Backend** - Persisting agents, results, and metrics (using Redis)
+3. ✅ **OmniDaemon** - Installed and operational
+4. ✅ **Agent** - Registered and listening for events
+5. ✅ **Event Flow** - Published task → Agent processed → Result stored
+6. ✅ **Health Check** - All systems verified
+
+**The Event Flow:**
+```
+Publisher (you)
+   │
+   ├─► Publishes to topic "greet.user"
+   │
+   ▼
+Event Bus (Redis Streams)
+   │   (Pluggable: Kafka, RabbitMQ, NATS coming soon)
+   │
+   ├─► Notifies all subscribers
+   │
+   ▼
+Your Agent (greeter)
+   │
+   ├─► Processes message
+   ├─► Generates response
+   │
+   ▼
+Storage Backend (Redis)
+   │   (Pluggable: PostgreSQL, MongoDB, S3 coming soon)
+   │
+   └─► Stores result for retrieval
+```
+
+---
+
+## ⚙️ Configuration (Optional)
+
+The Quick Start uses smart defaults - **you don't need to configure anything!**
+
+**Defaults:**
+- Storage Backend: JSON files in `.omnidaemon_data/` (pluggable)
+- Event Bus: Redis Streams at `localhost:6379` (pluggable)
+- API: Disabled (use SDK/CLI only)
+
+**To customize**, create a `.env` file:
+
+```bash
+# .env
+# Storage Backend (pluggable: json, redis, postgresql*, mongodb*, s3*)
+STORAGE_BACKEND=redis              # Production: Use Redis for distributed storage
+REDIS_URL=redis://localhost:6379   # Connection string for Redis backend
+
+# Event Bus (pluggable: redis_stream, kafka*, rabbitmq*, nats*)
+EVENT_BUS_TYPE=redis_stream        # Production-ready option (more coming soon)
+REDIS_URL=redis://localhost:6379   # Connection string for Redis Streams
+
+# API Server
+OMNIDAEMON_API_ENABLED=true        # Enable HTTP API server
+OMNIDAEMON_API_PORT=8765           # API port
+
+# Logging
+LOG_LEVEL=INFO                     # DEBUG for troubleshooting
+
+# * = Coming soon
+```
+
+**When to change defaults:**
+
+| Setting | Change When... |
+|---------|----------------|
+| `STORAGE_BACKEND=redis` | Production deployment, need distributed storage |
+| `REDIS_URL=...` | Event bus or storage on different host/port |
+| `OMNIDAEMON_API_ENABLED=true` | Want HTTP API access |
+| `LOG_LEVEL=DEBUG` | Troubleshooting issues |
+
+**For Quick Start**: Stick with defaults! 👍
+
+---
+
+## 🐛 Quick Troubleshooting
+
+### Problem: "Event Bus connection keeps failing"
+```bash
+# For Redis Streams backend (default):
+# Check if Redis is running
+redis-cli ping
+
+# Check Redis is on default port
+redis-cli -p 6379 ping
+
+# If using custom port, set it
+export REDIS_URL=redis://localhost:6380
+python agent_runner.py
+
+# For other event bus backends (when available):
+# Check EVENT_BUS_TYPE in your .env matches your running backend
+```
+
+### Problem: "Agent runs but doesn't process tasks"
+```bash
+# Verify agent registered
+python -c "
+import asyncio
+from omnidaemon import OmniDaemonSDK
+agents = asyncio.run(OmniDaemonSDK().list_agents())
+print(f'Registered agents: {agents}')
+"
+
+# Check event bus streams (if using Redis Streams)
+redis-cli XLEN omni-stream:greet.user
+```
+
+### Problem: "No output when running agent"
+**This is normal!** Agent runs in background. Look for:
+- ✅ "Registered agent" message
+- ✅ "Listening for topics" message
+- ✅ No error messages
+
+### Problem: "Can't import OmniDaemonSDK"
+```python
+# Try alternative import
+from omnidaemon import OmniDaemonSDK
+
+# Or check if installed
+pip list | grep omnidaemon
+```
+
+**Still stuck?** See [Support & Community](../community/support.md) for help.
+
+---
+
+## 🚀 What's Next?
+
+Congratulations! You've built your first AI agent with OmniDaemon. Here's where to go next:
+
+### Learn More
+
+1. **[Core Concepts](../core-concepts/event-driven-architecture.md)** - Understand EDA deeply
+2. **[Agent Lifecycle](../core-concepts/agent-lifecycle.md)** - Registration, subscription, deletion
+3. **[Callback Pattern](../core-concepts/callback-pattern.md)** - Master the callback
+
+### Build Real Agents
+
+4. **[Use OmniCore Agent](../examples/omnicore-agent.md)** - AI agent with MCP tools
+5. **[Use Google ADK](../examples/google-adk-agent.md)** - Google's Agent Development Kit
+6. **[Common Patterns](../how-to-guides/common-patterns.md)** - 7 production-ready recipes
+
+### Go to Production
+
+7. **[Production Setup](../enterprise/deployment.md)** - Deploy for real
+8. **[Monitoring](../how-to-guides/monitoring.md)** - Metrics, health, DLQ
+
+### Explore the API
+
+9. **[Python SDK Reference](../api-reference/sdk-api.md)** - Complete API docs
+10. **[CLI Reference](../api-reference/cli-reference.md)** - All CLI commands
+
+---
+
+## 📖 Need Help?
+
+- 💬 [Ask Questions](https://github.com/omnirexflora-labs/OmniDaemon/discussions)
+- 🐛 [Report Issues](https://github.com/omnirexflora-labs/OmniDaemon/issues)
+- 📚 [Get Support](../community/support.md)
+
+---
+
+Happy building! 🎉
+

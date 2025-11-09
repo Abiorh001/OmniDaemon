@@ -1,0 +1,432 @@
+---
+title: "OmniDaemon"
+description: "Universal Event-Driven Runtime Engine for AI Agents"
+---
+
+# 🌐 OmniDaemon
+
+## Universal Event-Driven Runtime Engine for AI Agents
+
+**Run any AI agent. Any framework. One event-driven control plane.**
+
+*Created by [Abiola Adeshina](https://github.com/Abiorh001) • From the team behind [OmniCoreAgent](https://github.com/omnirexflora-labs/omnicoreagent)*
+
+---
+
+## 🎯 What is OmniDaemon?
+
+> **"Kubernetes for AI Agents"** - A universal runtime that makes AI agents autonomous, observable, and scalable.
+
+OmniDaemon transforms AI from static reasoning engines into **event-driven, self-operating entities** that integrate seamlessly across clouds, data streams, and enterprise environments.
+
+### In 5 Seconds
+
+- 🤖 **Run AI agents in the background** (not chatbots, not APIs)
+- 📨 **Event-driven** (agents react to events, not HTTP requests)
+- 🔌 **Use any AI framework** (OmniCore Agent, Google ADK, LangChain, or custom)
+- 🚀 **Production-ready** (retries, DLQ, metrics, scaling built-in)
+
+---
+
+## 🌊 Why Event-Driven AI? The Evolution Story
+
+### The AI Evolution: Three Waves
+
+AI has progressed through distinct waves, each unlocking new possibilities but also introducing critical limitations.
+
+#### **Wave 1: Predictive Models (Traditional ML)**
+
+The first wave focused on narrowly defined, domain-specific tasks.
+
+```
+Training Data → ML Model → Predictions for Specific Use Case
+```
+
+**Limitations:**
+- ❌ Domain-specific and rigid
+- ❌ Required ML expertise for each use case
+- ❌ Difficult to repurpose
+- ❌ Lacked scalability
+
+#### **Wave 2: Generative Models (LLMs)**
+
+Generative AI revolutionized capabilities by training on vast, diverse datasets.
+
+```
+Massive Dataset → LLM → Generate Text, Images, Code
+```
+
+**Breakthrough:** Generalization across contexts
+
+**Limitations:**
+- ❌ Fixed in time (no dynamic information)
+- ❌ Expensive to fine-tune
+- ❌ No access to private/domain data
+- ❌ Generic responses without context
+
+**Example Problem:**
+> "Recommend an insurance policy tailored to my health history, location, and financial goals."
+
+The LLM can't deliver accurate recommendations because it lacks access to your personal data. Without it, responses are either generic or wrong.
+
+**Solution: Compound AI (RAG)**
+
+Retrieval-Augmented Generation bridges the gap:
+1. Retrieve user's health and financial data from database
+2. Add data to context during prompt assembly
+3. LLM generates accurate, personalized response
+
+```
+Database → Retrieve Context → LLM + Context → Accurate Response
+```
+
+**RAG Limitation:** Fixed workflows. Every interaction path must be pre-defined. This rigidity makes it impractical for complex, dynamic tasks.
+
+#### **Wave 3: Agentic AI (Current)**
+
+The future of AI lies with **autonomous agents** — systems that think, adapt, and act independently.
+
+```
+Event → Agent Reasons → Uses Tools → Adapts Workflow → Takes Action
+```
+
+**Why Agents Are Different:**
+- ✅ **Dynamic workflows** (figure out next steps on the fly)
+- ✅ **Context-driven** (adapt to the situation)
+- ✅ **Autonomous** (no pre-defined paths needed)
+- ✅ **Tool use** (access external systems)
+- ✅ **Memory** (learn from past interactions)
+
+**Industry Validation:**
+
+> "Agents are the new apps." — **Dharmesh Shah**, HubSpot CTO
+
+> "We've reached the upper limits of what LLMs can do. The future lies with autonomous agents." — **Marc Benioff**, Salesforce CEO (The Wall Street Journal, "Future of Everything" podcast)
+
+Google's Gemini and OpenAI's Orion are reportedly hitting limits despite larger training datasets. The next breakthrough isn't bigger models — it's **agentic systems**.
+
+---
+
+## 🏗️ Why Agents Need Event-Driven Architecture
+
+### The Infrastructure Problem
+
+AI agents aren't just an AI problem — they're a **distributed systems problem**.
+
+Agents need:
+- 📊 Access to data from multiple sources
+- 🔧 Ability to use tools and external systems
+- 🤝 Communication with other agents
+- 🌐 Outputs available to multiple services
+- ⚡ Real-time responsiveness
+- 📈 Horizontal scalability
+
+**This isn't about better models. It's about better infrastructure.**
+
+### The Tight Coupling Problem
+
+You *could* connect agents via APIs and RPC, but that creates:
+
+```
+❌ Tightly Coupled Architecture
+┌─────────┐     ┌─────────┐     ┌─────────┐
+│ Agent 1 │────▶│ Agent 2 │────▶│ Agent 3 │
+└─────────┘     └─────────┘     └─────────┘
+     │               │               │
+     ▼               ▼               ▼
+  [Fails] ───────▶ [Fails] ─────▶ [Fails]
+
+Problems:
+• If one agent fails, entire chain breaks
+• Hard to scale individual agents
+• Changes ripple through system
+• Difficult to add new agents
+• Can't support multiple consumers
+```
+
+### The Event-Driven Solution
+
+Event-Driven Architecture (EDA) solves this through **loose coupling**:
+
+```
+✅ Event-Driven Architecture
+        ┌──────────────────┐
+        │   Event Bus      │
+        │ (Redis Streams)  │
+        └──────────────────┘
+         ↑      ↑      ↑
+         │      │      │
+    ┌────┴──┐ ┌┴────┐ ┌┴────┐
+    │Agent 1│ │Agent│ │Agent│
+    │       │ │  2  │ │  3  │
+    └───────┘ └─────┘ └─────┘
+
+Benefits:
+✅ Agents don't depend on each other
+✅ Scale agents independently
+✅ Add/remove agents dynamically
+✅ Multiple consumers per event
+✅ Automatic retries & DLQ
+✅ Message persistence
+```
+
+### Agents as Microservices
+
+Like microservices, agents are:
+- **Autonomous** - Operate independently
+- **Decoupled** - Don't depend on each other
+- **Scalable** - Add more instances for load
+
+**But agents go further:**
+- **Context-rich** - Need shared information to reason
+- **Tool-enabled** - Interact with external systems
+- **Collaborative** - Share insights with other agents
+- **Adaptive** - Modify behavior based on events
+
+**The Challenge:** Managing these informational dependencies without tight coupling.
+
+**The Solution:** EDA provides a "central nervous system" for data flow.
+
+---
+
+## 🚀 What OmniDaemon Provides
+
+### Traditional AI (Request-Driven)
+```
+User asks → AI responds → Done ❌
+```
+
+### OmniDaemon (Event-Driven)
+```
+Event happens → AI agent reacts → Result stored ✅
+              → Multiple agents listen
+              → Automatic retries
+              → DLQ for failures
+```
+
+### Core Features
+
+| Feature | What It Means |
+|---------|---------------|
+| 🤖 **Run Any AI Agent** | OmniCore Agent, Google ADK, LangChain, CrewAI, AutoGen, LlamaIndex, or custom |
+| 📨 **Event-Driven** | Agents listen to topics, not HTTP endpoints |
+| 🔄 **Auto Retries** | Failed tasks retry automatically (configurable) |
+| 💀 **Dead Letter Queue** | Failed messages go to DLQ for analysis |
+| 📊 **Real-time Metrics** | Tasks received, processed, failed, timing |
+| 🎛️ **Full Control** | Beautiful CLI + HTTP API for management |
+| ⚖️ **Horizontal Scaling** | Run multiple agent instances for load balancing |
+| 🔌 **Pluggable** | Swap backends via environment variables (no code changes!) |
+
+### Pluggable Architecture
+
+**The Simple Truth:** You provide the URL, OmniDaemon handles EVERYTHING else!
+
+```bash
+# Event Bus - Switch backends with NO code changes
+EVENT_BUS_TYPE=redis_stream + REDIS_URL=...         # Current
+EVENT_BUS_TYPE=rabbitmq + RABBITMQ_URL=...          # Coming soon
+EVENT_BUS_TYPE=kafka + KAFKA_SERVERS=...            # Coming soon
+
+# Storage - Switch backends with NO code changes  
+STORAGE_BACKEND=json + JSON_STORAGE_DIR=...         # Development
+STORAGE_BACKEND=redis + REDIS_URL=...               # Production
+STORAGE_BACKEND=postgresql + POSTGRES_URL=...       # Coming soon
+STORAGE_BACKEND=mongodb + MONGODB_URI=...           # Coming soon
+```
+
+**Your agent code NEVER changes. Just update environment variables!**
+
+---
+
+## 🎯 When to Use OmniDaemon
+
+### ✅ Perfect For
+
+- **Background AI Agents** - Autonomous agents that react to events
+- **Event-Driven Workflows** - Multi-step AI processing pipelines
+- **Multi-Agent Systems** - Multiple agents collaborating on tasks
+- **Async AI Processing** - Long-running AI tasks (not real-time chat)
+- **Enterprise AI Ops** - Scalable, observable, production AI systems
+
+### ❌ Not Recommended For
+
+- **Simple HTTP APIs** - Use FastAPI/Flask directly (simpler)
+- **Real-Time Chat** - Use WebSockets/SSE (lower latency)
+- **Synchronous Request-Response** - Use REST APIs (simpler architecture)
+- **Single-Shot Scripts** - Use Python scripts directly (no runtime needed)
+
+### 🆚 Compared to Alternatives
+
+| Tool | Use Case | vs OmniDaemon |
+|------|----------|---------------|
+| **Celery** | Task queues | ❌ Not AI-first, complex setup, no agent abstraction |
+| **AWS Lambda** | Serverless functions | ❌ Cold starts, time limits, vendor lock-in |
+| **Temporal** | Workflow engine | ❌ Heavy, complex, not AI-optimized |
+| **Airflow** | DAG orchestration | ❌ Batch-oriented, not real-time events |
+| **OmniDaemon** | AI Agent Runtime | ✅ AI-first, event-driven, any framework, production-ready |
+
+---
+
+## 🏗️ Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         OmniDaemon                              │
+│                   Universal Runtime Engine                       │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              │
+        ┌─────────────────────┼─────────────────────┐
+        │                     │                     │
+        ▼                     ▼                     ▼
+┌──────────────┐    ┌──────────────┐    ┌──────────────┐
+│  Event Bus   │    │   Storage    │    │ Agent Runner │
+│ (Pluggable!) │    │ (Pluggable!) │    │  (Your Code) │
+├──────────────┤    ├──────────────┤    ├──────────────┤
+│ • Streams    │    │ • Agents     │    │ • Register   │
+│ • Pub/Sub    │    │ • Results    │    │ • Subscribe  │
+│ • DLQ        │    │ • Metrics    │    │ • Process    │
+│ • Groups     │    │ • Config     │    │ • Respond    │
+│              │    │              │    │              │
+│ Redis ✅     │    │ Redis ✅     │    │              │
+│ Kafka 🚧     │    │ JSON ✅      │    │              │
+│ RabbitMQ 🚧  │    │ Postgres 🚧  │    │              │
+│ NATS 🚧      │    │ MongoDB 🚧   │    │              │
+└──────────────┘    └──────────────┘    └──────────────┘
+        │                     │                     │
+        │                     │                     │
+        └─────────────────────┴─────────────────────┘
+                              │
+                              │
+        ┌─────────────────────┼─────────────────────┐
+        │                     │                     │
+        ▼                     ▼                     ▼
+┌──────────────┐    ┌──────────────┐    ┌──────────────┐
+│     CLI      │    │     API      │    │     SDK      │
+│   (Typer)    │    │  (FastAPI)   │    │  (Python)    │
+├──────────────┤    ├──────────────┤    ├──────────────┤
+│ • Commands   │    │ • REST       │    │ • Register   │
+│ • Rich UI    │    │ • Endpoints  │    │ • Publish    │
+│ • Monitoring │    │ • Webhooks   │    │ • Query      │
+└──────────────┘    └──────────────┘    └──────────────┘
+```
+
+### Key Components
+
+1. **Event Bus (Pluggable)** - Message broker for event distribution
+   - Currently: Redis Streams
+   - Coming: Kafka, RabbitMQ, NATS
+
+2. **Storage (Pluggable)** - Persistent layer for agents, results, metrics
+   - Currently: Redis, JSON
+   - Coming: PostgreSQL, MongoDB, S3
+
+3. **Agent Runner** - Orchestrates agent execution and lifecycle
+
+4. **CLI** - Beautiful command-line interface (powered by Rich)
+
+5. **API** - RESTful HTTP API (powered by FastAPI)
+
+6. **SDK** - Python SDK for agent integration
+
+---
+
+## 🚀 Quick Start
+
+Get OmniDaemon running in **5 minutes**:
+
+```bash
+# 1. Install Redis (event bus backend)
+docker run -d -p 6379:6379 --name redis redis:latest
+
+# 2. Install OmniDaemon (using uv - recommended)
+uv add omnidaemon
+# Or with pip: pip install omnidaemon
+
+# 3. Create your first agent
+cat > agent_runner.py << 'EOF'
+import asyncio
+from omnidaemon import OmniDaemonSDK
+from omnidaemon import AgentConfig
+
+sdk = OmniDaemonSDK()
+
+async def greeter(message: dict):
+    """Your AI agent runs here!"""
+    name = message.get("content", {}).get("name", "stranger")
+    return {"reply": f"Hello, {name}! 👋"}
+
+async def main():
+    await sdk.register_agent(
+        agent_config=AgentConfig(
+            topic="greet.user",
+            callback=greeter,
+        )
+    )
+    await sdk.start()
+    print("🎧 Agent running. Press Ctrl+C to stop.")
+    
+    try:
+        while True:
+            await asyncio.sleep(1)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        await sdk.shutdown()
+
+if __name__ == "__main__":
+    asyncio.run(main())
+EOF
+
+# 4. Run your agent
+python agent_runner.py
+```
+
+**🎉 Your AI agent is now running and listening for events!**
+
+[**→ Continue with Full Tutorial**](getting-started/quick-start.md)
+
+---
+
+## 📚 What's Next?
+
+### For New Users
+1. [**Getting Started**](getting-started/introduction.md) - Understand core concepts
+2. [**Quick Start Tutorial**](getting-started/quick-start.md) - Build your first agent in 10 minutes
+3. [**Complete Examples**](examples/omnicore-agent.md) - Real-world agent implementations
+
+### For Developers
+4. [**How-To Guides**](how-to-guides/monitoring.md) - Solve specific problems
+5. [**Common Patterns**](how-to-guides/common-patterns.md) - Production-ready recipes
+6. [**API Reference**](api-reference/sdk-api.md) - Complete SDK documentation
+
+### For Architects
+7. [**Architecture & Design**](architecture/system-overview.md) - Deep dive into system design
+8. [**Enterprise**](enterprise/use-cases.md) - Use cases and deployment guide
+
+---
+
+## 🌟 Learn More
+
+- [**Read the README**](https://github.com/omnirexflora-labs/OmniDaemon) - Comprehensive overview
+- [**Explore Examples**](https://github.com/omnirexflora-labs/OmniDaemon/tree/main/examples) - Working code
+- [**Join Community**](community/support.md) - Get help and contribute
+
+---
+
+## 📖 References
+
+This documentation is inspired by Sean Falconer's article: ["The Future of AI Agents is Event-Driven"](https://seanfalconer.medium.com/the-future-of-ai-agents-is-event-driven-9e25124060d6)
+
+---
+
+---
+
+## 👨‍💻 About
+
+**Created by [Abiola Adeshina](https://github.com/Abiorh001) and the OmniDaemon Team**
+
+*From the creators of [OmniCore Agent](https://github.com/omnirexflora-labs/omnicoreagent) — building the future of event-driven AI systems*
+
+[⭐ Star on GitHub](https://github.com/omnirexflora-labs/OmniDaemon) · [🐛 Report Bug](https://github.com/omnirexflora-labs/OmniDaemon/issues) · [💡 Request Feature](https://github.com/omnirexflora-labs/OmniDaemon/issues)
+

@@ -25,14 +25,9 @@ class RedisPubSubEventBus(BaseEventBus):
         self._pubsub: Optional[aioredis.client.PubSub] = None
         self._running = False
         self._listener_task: Optional[asyncio.Task] = None
-        # channel -> list[callable]
         self._callbacks: Dict[str, List[Callable[[dict], Any]]] = {}
-        # protect connect operations
         self._connect_lock = asyncio.Lock()
 
-    # ----------------
-    # Connection
-    # ----------------
     async def connect(self) -> None:
         async with self._connect_lock:
             if self._running and self._redis is not None:
@@ -73,9 +68,6 @@ class RedisPubSubEventBus(BaseEventBus):
             logger.exception(f"[RedisBus] Error during close: {e}")
             raise
 
-    # ----------------
-    # Publish
-    # ----------------
     async def publish(self, topic: str, message: Any) -> None:
         """Publish JSON message. Lazy-connect if necessary."""
         channel = topic
@@ -89,9 +81,6 @@ class RedisPubSubEventBus(BaseEventBus):
             logger.exception(f"[RedisBus] Publish error on {channel}: {e}")
             raise
 
-    # ----------------
-    # Subscribe / Unsubscribe
-    # ----------------
     async def subscribe(self, topic: str, callback: Callable[[dict], Any]) -> None:
         """
         Register callback for channel.
@@ -100,17 +89,14 @@ class RedisPubSubEventBus(BaseEventBus):
         channel = topic
         if not self._pubsub or not self._redis:
             await self.connect()
-        # add callback
         callbacks = self._callbacks.setdefault(channel, [])
         callbacks.append(callback)
 
-        # ensure subscription at server
         await self._pubsub.subscribe(channel)
         logger.info(
             f"[RedisBus] Subscribed to channel: {channel} (callbacks={len(callbacks)})"
         )
 
-        # ensure listener loop is running
         if not self._listener_task or self._listener_task.done():
             self._listener_task = asyncio.create_task(self._listen_loop())
 
@@ -131,7 +117,6 @@ class RedisPubSubEventBus(BaseEventBus):
             if not self._callbacks[channel]:
                 self._callbacks.pop(channel, None)
 
-        # if no callbacks for channel -> unsubscribe from redis
         if channel not in self._callbacks and self._pubsub:
             try:
                 await self._pubsub.unsubscribe(channel)
@@ -141,9 +126,6 @@ class RedisPubSubEventBus(BaseEventBus):
                     f"[RedisBus] Error unsubscribing from channel: {channel}"
                 )
 
-    # ----------------
-    # Listener loop
-    # ----------------
     async def _listen_loop(self):
         """Background loop that reads pubsub messages and dispatches to callbacks."""
         logger.info("[RedisBus] Listener loop started")
@@ -166,18 +148,14 @@ class RedisPubSubEventBus(BaseEventBus):
                         else:
                             payload = raw
                     except Exception:
-                        # fallback - put raw in dict
                         payload = {"raw": raw}
 
-                    # dispatch to registered callbacks (copy list)
                     cbs = list(self._callbacks.get(channel, []))
                     for cb in cbs:
                         try:
-                            # async callback
                             if asyncio.iscoroutinefunction(cb):
                                 asyncio.create_task(cb(payload))
                             else:
-                                # run sync callback in default executor to avoid blocking loop
                                 loop = asyncio.get_running_loop()
                                 loop.run_in_executor(None, cb, payload)
                         except Exception as cb_err:
@@ -188,7 +166,6 @@ class RedisPubSubEventBus(BaseEventBus):
                     raise
                 except Exception as e:
                     logger.exception(f"[RedisBus] Listener loop error: {e}")
-                    # backoff a bit on errors before retrying
                     await asyncio.sleep(1.0)
         except asyncio.CancelledError:
             logger.info("[RedisBus] Listener cancelled")

@@ -8,23 +8,17 @@ from google.adk.sessions import InMemorySessionService
 from google.adk.runners import Runner
 from google.genai import types
 import asyncio
-from omnidaemon.result_store import RedisResultStore
-from omnidaemon.sdk import OmniDaemonSDK
-from omnidaemon.api.server import start_api_server
 import logging
 from dotenv import load_dotenv
 from google.adk.models.lite_llm import LiteLlm
-from omnidaemon.schemas import AgentConfig, SubscriptionConfig
+from omnidaemon import OmniDaemonSDK, start_api_server, AgentConfig, SubscriptionConfig
 
 load_dotenv()
 # api_key = os.getenv("GOOGLE_API_KEY")
 api_key = os.getenv("OPENAI_API_KEY")
 
-sdk = OmniDaemonSDK(
-    result_store=RedisResultStore(
-        redi_url=config("REDIS_URL", default="redis://localhost")
-    )
-)
+
+sdk = OmniDaemonSDK()
 
 
 logger = logging.getLogger(__name__)
@@ -33,8 +27,7 @@ logger = logging.getLogger(__name__)
 TARGET_FOLDER_PATH = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "/home/abiorh/ai/google_adk_file_system"
 )
-# Ensure TARGET_FOLDER_PATH is an absolute path for the MCP server.
-# If you created ./adk_agent_samples/mcp_agent/your_folder,
+
 
 filesystem_agent = LlmAgent(
     # model="gemini-2.0-flash",
@@ -118,37 +111,57 @@ async def call_file_system_agent(message: dict):
 
 
 async def main():
-    await sdk.register_agent(
-        agent_config=AgentConfig(
-            name="GOOGLE_ADK_FILESYSTEM_AGENT",
-            topic="file_system.tasks",
-            callback=call_file_system_agent,
-            description="Help the user manage their files. You can list files, read files, etc.",
-            tools=[],
-            config=SubscriptionConfig(
-                reclaim_idle_ms=6000, dlq_retry_limit=3, consumer_count=3
-            ),
-        )
-    )
-
-    # Start the agent runner
-    await sdk.start()
-
-    # ✅ Start API server separately (optional)
-
-    enable_api = config("OMNIDAEMON_API_ENABLED", default=False, cast=bool)
-    api_port = config("OMNIDAEMON_API_PORT", default=8765, cast=int)
-    if enable_api:
-        asyncio.create_task(start_api_server(sdk, port=api_port))
-        logger.info(f"OmniDaemon API running on http://127.0.0.1:{api_port}")
-
-    # Keep running to listen to new messages
     try:
-        while True:
-            await asyncio.sleep(1)
-    except KeyboardInterrupt:
-        print("Stopping...")
-        await sdk.stop()
+        # Register agents
+        logger.info("Registering Google ADK agents...")
+        await sdk.register_agent(
+            agent_config=AgentConfig(
+                name="GOOGLE_ADK_FILESYSTEM_AGENT",
+                topic="file_system.tasks",
+                callback=call_file_system_agent,
+                description="Help the user manage their files. You can list files, read files, etc.",
+                tools=[],
+                config=SubscriptionConfig(
+                    reclaim_idle_ms=6000, dlq_retry_limit=3, consumer_count=3
+                ),
+            )
+        )
+        logger.info("Agents registered successfully")
+
+        # Start the agent runner
+        logger.info("Starting OmniDaemon agent runner...")
+        await sdk.start()
+        logger.info("OmniDaemon agent runner started")
+
+        # Start API server if enabled
+        enable_api = config("OMNIDAEMON_API_ENABLED", default=False, cast=bool)
+        api_port = config("OMNIDAEMON_API_PORT", default=8765, cast=int)
+        if enable_api:
+            asyncio.create_task(start_api_server(sdk, port=api_port))
+            logger.info(f"OmniDaemon API running on http://127.0.0.1:{api_port}")
+
+        # Keep running to listen to new messages
+        logger.info("Agent runner is now processing events. Press Ctrl+C to stop.")
+        try:
+            while True:
+                await asyncio.sleep(1)
+        except (KeyboardInterrupt, asyncio.CancelledError):
+            logger.info("Received shutdown signal (Ctrl+C)...")
+
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        logger.info("Received shutdown signal...")
+    except Exception as e:
+        logger.error(f"Error during agent runner execution: {e}", exc_info=True)
+        raise
+
+    finally:
+        # Always cleanup, even if there was an error
+        logger.info("Shutting down OmniDaemon...")
+        try:
+            await sdk.shutdown()
+            logger.info("OmniDaemon shutdown complete")
+        except Exception as e:
+            logger.error(f"Error during shutdown: {e}", exc_info=True)
 
 
 # -----------------------------

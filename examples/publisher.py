@@ -1,15 +1,7 @@
 import asyncio
-from omnidaemon.sdk import OmniDaemonSDK
-from omnidaemon.result_store import RedisResultStore
-from decouple import config
-from omnidaemon.schemas import AgentConfig, EventEnvelope, PayloadBase
+from omnidaemon import OmniDaemonSDK, AgentConfig, EventEnvelope, PayloadBase
 
-
-sdk = OmniDaemonSDK(
-    result_store=RedisResultStore(
-        redi_url=config("REDIS_URL", default="redis://localhost")
-    )
-)
+sdk = OmniDaemonSDK()
 
 
 async def publish_tasks(sdk: OmniDaemonSDK):

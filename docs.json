@@ -1,0 +1,173 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "maple",
+  "name": "OmniDaemon",
+  "description": "Universal Event-Driven Runtime Engine for AI Agents",
+  "favicon": "/favicon.svg",
+  "colors": {
+    "primary": "#0d9488",
+    "light": "#14b8a6",
+    "dark": "#0f766e"
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "GitHub",
+        "href": "https://github.com/omnirexflora-labs/OmniDaemon",
+        "icon": "github"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Get Started",
+      "href": "https://github.com/omnirexflora-labs/OmniDaemon"
+    }
+  },
+  "navigation": {
+    "dropdowns": [
+      {
+        "dropdown": "Documentation",
+        "icon": "book",
+        "description": "Learn how to use OmniDaemon",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "docs/index",
+              "docs/getting-started/introduction",
+              "docs/getting-started/quick-start"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "docs/core-concepts/event-driven-architecture",
+              "docs/core-concepts/agent-lifecycle",
+              "docs/core-concepts/pluggable-architecture",
+              "docs/core-concepts/event-bus-architecture",
+              "docs/core-concepts/storage-architecture",
+              "docs/core-concepts/callback-pattern"
+            ]
+          },
+          {
+            "group": "How-To Guides",
+            "pages": [
+              "docs/how-to-guides/monitoring",
+              "docs/how-to-guides/configuration",
+              "docs/how-to-guides/common-patterns"
+            ]
+          },
+          {
+            "group": "Architecture",
+            "pages": [
+              "docs/architecture/system-overview"
+            ]
+          },
+          {
+            "group": "Enterprise",
+            "pages": [
+              "docs/enterprise/use-cases",
+              "docs/enterprise/deployment"
+            ]
+          },
+          {
+            "group": "Community",
+            "pages": [
+              "docs/community/contributing",
+              "docs/community/support"
+            ]
+          }
+        ]
+      },
+      {
+        "dropdown": "API Reference",
+        "icon": "code",
+        "description": "SDK and CLI documentation",
+        "groups": [
+          {
+            "group": "API Documentation",
+            "pages": [
+              "docs/api-reference/sdk-api",
+              "docs/api-reference/cli-reference"
+            ]
+          }
+        ]
+      },
+      {
+        "dropdown": "Examples",
+        "icon": "flask",
+        "description": "Real-world integration examples",
+        "groups": [
+          {
+            "group": "Integration Examples",
+            "pages": [
+              "docs/examples/omnicore-agent",
+              "docs/examples/google-adk-agent",
+              "docs/examples/publisher"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "footer": {
+    "socials": {
+      "x": "https://x.com/abiorhmangana",
+      "github": "https://github.com/omnirexflora-labs/OmniDaemon",
+      "linkedin": "https://www.linkedin.com/in/abiola-a-06b66a1a4/"
+    },
+    "links": [
+      {
+        "header": "Resources",
+        "items": [
+          {
+            "label": "Documentation",
+            "href": "https://abiorh001.github.io/OmniDaemon/"
+          },
+          {
+            "label": "Examples",
+            "href": "https://github.com/omnirexflora-labs/OmniDaemon/tree/main/examples"
+          },
+          {
+            "label": "Report Bug",
+            "href": "https://github.com/omnirexflora-labs/OmniDaemon/issues"
+          }
+        ]
+      },
+      {
+        "header": "Community",
+        "items": [
+          {
+            "label": "GitHub Discussions",
+            "href": "https://github.com/omnirexflora-labs/OmniDaemon/discussions"
+          },
+          {
+            "label": "Contribute",
+            "href": "https://github.com/omnirexflora-labs/OmniDaemon/blob/main/docs/community/contributing.mdx"
+          },
+          {
+            "label": "OmniCore Agent",
+            "href": "https://github.com/omnirexflora-labs/omnicoreagent"
+          }
+        ]
+      }
+    ]
+  },
+  "fonts": {
+    "family": "Inter"
+  },
+  "styling": {
+    "eyebrows": "breadcrumbs",
+    "codeblocks": {
+      "theme": {
+        "light": "github-light",
+        "dark": "github-dark"
+      }
+    }
+  },
+  "integrations": {
+    "telemetry": {
+      "enabled": true
+    }
+  }
+}

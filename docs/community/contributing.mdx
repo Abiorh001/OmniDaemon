@@ -1,0 +1,681 @@
+# Contributing to OmniDaemon
+
+Thank you for your interest in contributing to OmniDaemon! This guide will help you get started.
+
+---
+
+## 🎯 Ways to Contribute
+
+### 1. **Code Contributions**
+- Bug fixes
+- New features
+- Performance improvements
+- Test coverage
+- Documentation improvements
+
+### 2. **Non-Code Contributions**
+- Bug reports
+- Feature requests
+- Documentation improvements
+- Community support (answering questions)
+- Writing tutorials/blog posts
+- Creating examples
+- Improving error messages
+
+---
+
+## 🚀 Getting Started
+
+### 1. **Fork the Repository**
+
+```bash
+# Visit https://github.com/omnirexflora-labs/OmniDaemon
+# Click "Fork" button
+
+# Clone your fork
+git clone https://github.com/YOUR_USERNAME/OmniDaemon.git
+cd OmniDaemon
+```
+
+### 2. **Set Up Development Environment**
+
+```bash
+# Install uv (recommended)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Create virtual environment
+uv venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install dependencies
+uv sync
+
+# Install development dependencies
+uv add --dev pytest pytest-asyncio pytest-cov black ruff mypy
+
+# Verify installation
+python -c "import omnidaemon; print('✅ OmniDaemon installed')"
+```
+
+### 3. **Create a Branch**
+
+```bash
+# Create a descriptive branch name
+git checkout -b feature/add-kafka-support
+# or
+git checkout -b fix/redis-connection-timeout
+```
+
+---
+
+## 📝 Code Style Guidelines
+
+### Python Style
+
+We follow **PEP 8** with some modifications:
+
+```python
+# ✅ Good
+async def process_message(message: dict) -> dict:
+    """
+    Process a message from the event bus.
+    
+    Args:
+        message: Event envelope containing payload
+        
+    Returns:
+        Processed result dictionary
+    """
+    result = await ai_agent.process(message["content"])
+    return {"status": "success", "result": result}
+
+
+# ❌ Bad
+async def process(msg):  # Missing type hints, unclear name
+    return await agent.run(msg['data'])  # No error handling
+```
+
+### Formatting
+
+```bash
+# Format code with black
+black src/ tests/
+
+# Check with ruff
+ruff check src/ tests/
+
+# Type checking with mypy
+mypy src/
+```
+
+### Imports
+
+```python
+# Standard library
+import os
+import asyncio
+from typing import Optional, Dict, Any
+
+# Third-party
+import redis.asyncio as redis
+from pydantic import BaseModel
+
+# Local
+from omnidaemon import EventEnvelope
+from omnidaemon.event_bus import get_event_bus
+```
+
+---
+
+## ✅ Testing
+
+### Running Tests
+
+```bash
+# Run all tests
+pytest
+
+# Run with coverage
+pytest --cov=src/omnidaemon --cov-report=html
+
+# Run specific test file
+pytest tests/test_sdk.py
+
+# Run specific test
+pytest tests/test_sdk.py::test_publish_task
+```
+
+### Writing Tests
+
+```python
+# tests/test_my_feature.py
+import pytest
+from omnidaemon import OmniDaemonSDK
+
+@pytest.mark.asyncio
+async def test_publish_task():
+    """Test task publishing functionality."""
+    sdk = OmniDaemonSDK()
+    
+    # Arrange
+    topic = "test.topic"
+    payload = {"content": "test message"}
+    
+    # Act
+    message_id = await sdk.publish_task(
+        topic=topic,
+        payload=payload
+    )
+    
+    # Assert
+    assert message_id is not None
+    assert isinstance(message_id, str)
+
+
+@pytest.mark.asyncio
+async def test_register_agent():
+    """Test agent registration."""
+    sdk = OmniDaemonSDK()
+    
+    async def test_callback(message):
+        return {"status": "success"}
+    
+    # Act
+    sdk.register_agent(
+        agent_config=AgentConfig(
+            name="TestAgent",
+            topics=["test.topic"]
+        ),
+        callback=test_callback
+    )
+    
+    # Assert
+    agents = await sdk.list_agents()
+    assert len(agents) > 0
+```
+
+---
+
+## 📦 Adding New Features
+
+### Feature Development Workflow
+
+1. **Discuss First**
+   - Open a GitHub Issue to discuss the feature
+   - Wait for maintainer feedback before starting
+   - Ensure alignment with project vision
+
+2. **Design Document** (for large features)
+   - Write a design doc in `docs/architecture/`
+   - Include:
+     - Problem statement
+     - Proposed solution
+     - Alternatives considered
+     - Migration path (if applicable)
+
+3. **Implementation**
+   - Follow code style guidelines
+   - Add comprehensive tests
+   - Update documentation
+   - Add example usage
+
+4. **Documentation**
+   - Update relevant docs in `docs/`
+   - Add docstrings to all public methods
+   - Update `README.md` if applicable
+
+### Example: Adding a New Event Bus Backend
+
+```python
+# src/omnidaemon/event_bus/kafka_bus.py
+
+from omnidaemon.event_bus.base import BaseEventBus
+from typing import Callable, Optional
+
+class KafkaEventBus(BaseEventBus):
+    """
+    Kafka-based event bus implementation.
+    
+    Uses Apache Kafka for durable, high-throughput messaging.
+    
+    Args:
+        bootstrap_servers: Kafka bootstrap servers
+        group_id: Consumer group ID
+        **kafka_config: Additional Kafka configuration
+        
+    Example:
+        >>> bus = KafkaEventBus(
+        ...     bootstrap_servers="localhost:9092",
+        ...     group_id="omnidaemon-agents"
+        ... )
+        >>> await bus.connect()
+    """
+    
+    def __init__(
+        self,
+        bootstrap_servers: str,
+        group_id: str = "omnidaemon",
+        **kafka_config
+    ):
+        self.bootstrap_servers = bootstrap_servers
+        self.group_id = group_id
+        self.kafka_config = kafka_config
+        self.producer = None
+        self.consumer = None
+    
+    async def connect(self) -> None:
+        """Establish connection to Kafka cluster."""
+        from aiokafka import AIOKafkaProducer, AIOKafkaConsumer
+        
+        self.producer = AIOKafkaProducer(
+            bootstrap_servers=self.bootstrap_servers,
+            **self.kafka_config
+        )
+        await self.producer.start()
+    
+    async def publish(
+        self,
+        topic: str,
+        payload: dict,
+        **kwargs
+    ) -> str:
+        """Publish message to Kafka topic."""
+        import json
+        
+        message = json.dumps(payload).encode('utf-8')
+        metadata = await self.producer.send(topic, message)
+        return f"{metadata.topic}-{metadata.partition}-{metadata.offset}"
+    
+    # Implement other abstract methods...
+```
+
+---
+
+## 🐛 Reporting Bugs
+
+### Before Submitting
+
+1. **Search existing issues** to avoid duplicates
+2. **Try the latest version** of OmniDaemon
+3. **Reproduce the bug** in a minimal example
+
+### Bug Report Template
+
+```markdown
+**Bug Description**
+A clear description of the bug.
+
+**To Reproduce**
+Steps to reproduce the behavior:
+1. Install OmniDaemon via `uv add omnidaemon`
+2. Run agent with Redis backend
+3. Publish task to topic
+4. See error
+
+**Expected Behavior**
+What you expected to happen.
+
+**Actual Behavior**
+What actually happened.
+
+**Code Example**
+```python
+# Minimal reproducible example
+from omnidaemon import OmniDaemonSDK
+
+sdk = OmniDaemonSDK()
+# Code that triggers the bug...
+```
+
+**Environment**
+- OmniDaemon version: 0.1.0
+- Python version: 3.11.5
+- OS: Ubuntu 22.04
+- Redis version: 7.0
+
+**Traceback**
+```
+Paste full error traceback here
+```
+
+**Additional Context**
+Any other relevant information.
+```
+
+---
+
+## 💡 Feature Requests
+
+### Feature Request Template
+
+```markdown
+**Problem**
+Describe the problem you're trying to solve.
+
+**Proposed Solution**
+Your suggested implementation.
+
+**Alternatives**
+Other solutions you've considered.
+
+**Use Case**
+How this feature would be used.
+
+**Example**
+```python
+# How the API might look
+await sdk.new_feature(...)
+```
+
+**Additional Context**
+Any other relevant information.
+```
+
+---
+
+## 📚 Documentation Contributions
+
+### Documentation Standards
+
+- **Clear and concise** writing
+- **Code examples** for all features
+- **Real-world use cases**
+- **Beginner-friendly** language
+- **Enterprise perspective** where applicable
+
+### Building Docs Locally
+
+```bash
+# Install MkDocs
+uv add mkdocs-material
+
+# Serve docs locally
+mkdocs serve
+
+# Open browser to http://127.0.0.1:8000
+```
+
+### Documentation Structure
+
+```
+docs/
+├── index.md                    # Home page
+├── getting-started/
+│   ├── introduction.md
+│   └── quick-start.md
+├── core-concepts/              # Architecture deep dives
+├── examples/                   # Complete working examples
+├── how-to-guides/              # Task-oriented guides
+├── api-reference/              # API documentation
+├── architecture/               # System architecture
+├── enterprise/                 # Enterprise features
+└── community/                  # This section
+```
+
+---
+
+## 🔄 Pull Request Process
+
+### 1. **Before Submitting**
+
+- [ ] Code follows style guidelines (`black`, `ruff`)
+- [ ] All tests pass (`pytest`)
+- [ ] New tests added for new features
+- [ ] Documentation updated
+- [ ] Commit messages are descriptive
+
+### 2. **Commit Message Format**
+
+```bash
+# Format: <type>(<scope>): <description>
+
+feat(event-bus): add Kafka backend support
+fix(sdk): handle Redis connection timeouts gracefully
+docs(examples): add multi-agent pipeline example
+test(storage): add tests for JSON store
+refactor(runner): simplify message acknowledgment logic
+```
+
+**Types:**
+- `feat` - New feature
+- `fix` - Bug fix
+- `docs` - Documentation
+- `test` - Tests
+- `refactor` - Code refactoring
+- `perf` - Performance improvement
+- `chore` - Maintenance
+
+### 3. **Pull Request Template**
+
+```markdown
+**Description**
+Brief description of changes.
+
+**Related Issue**
+Fixes #123
+
+**Changes**
+- Added Kafka event bus backend
+- Updated documentation
+- Added integration tests
+
+**Testing**
+- [ ] All existing tests pass
+- [ ] Added new tests
+- [ ] Manually tested
+
+**Screenshots** (if applicable)
+...
+
+**Checklist**
+- [ ] Code follows style guidelines
+- [ ] Tests pass
+- [ ] Documentation updated
+- [ ] Backward compatible (or migration guide provided)
+```
+
+### 4. **Review Process**
+
+1. **Automated Checks**
+   - CI/CD pipeline runs tests
+   - Linters check code style
+   - Coverage report generated
+
+2. **Maintainer Review**
+   - Code quality
+   - Test coverage
+   - Documentation
+   - Design alignment
+
+3. **Feedback**
+   - Address review comments
+   - Update PR as needed
+   - Discussion on implementation
+
+4. **Merge**
+   - Maintainer approves and merges
+   - PR gets squashed into single commit
+   - Automatic release notes generation
+
+---
+
+## 🏆 Recognition
+
+### Contributors
+
+All contributors are recognized in:
+- **GitHub Contributors** page
+- **Release notes** (for significant contributions)
+- **README.md** acknowledgments section
+
+### Becoming a Maintainer
+
+Active contributors may be invited to become maintainers based on:
+- Consistent, high-quality contributions
+- Understanding of project architecture
+- Community engagement
+- Reliability and professionalism
+
+---
+
+## 📜 Code of Conduct
+
+### Our Pledge
+
+We are committed to providing a welcoming and inspiring community for all.
+
+### Our Standards
+
+**Positive behavior:**
+- ✅ Be respectful and inclusive
+- ✅ Welcome newcomers
+- ✅ Accept constructive criticism gracefully
+- ✅ Focus on what's best for the community
+
+**Unacceptable behavior:**
+- ❌ Harassment or discrimination
+- ❌ Trolling or insulting comments
+- ❌ Personal or political attacks
+- ❌ Publishing others' private information
+
+### Enforcement
+
+Violations may result in:
+1. Warning
+2. Temporary ban
+3. Permanent ban
+
+Report violations to: [mintify.com](https://mintify.com)
+
+---
+
+## 🛠️ Development Tips
+
+### Debugging
+
+```bash
+# Enable debug logging
+export OMNIDAEMON_LOG_LEVEL=DEBUG
+
+# Run with Python debugger
+python -m pdb agent_runner.py
+
+# Use ipdb for interactive debugging
+pip install ipdb
+# Add to code: import ipdb; ipdb.set_trace()
+```
+
+### Performance Profiling
+
+```bash
+# Profile your agent
+python -m cProfile -o profile.stats agent_runner.py
+
+# Analyze with snakeviz
+pip install snakeviz
+snakeviz profile.stats
+```
+
+### Memory Profiling
+
+```bash
+# Install memory profiler
+pip install memory-profiler
+
+# Profile specific function
+python -m memory_profiler agent_runner.py
+```
+
+---
+
+## 📞 Getting Help
+
+### Stuck? Here's how to get help:
+
+1. **Check Documentation**
+   - [Official Docs](https://abiorh001.github.io/OmniDaemon/)
+   - [OmniCore Example](../examples/omnicore-agent.md)
+   - [Google ADK Example](../examples/google-adk-agent.md)
+   - [Publisher Example](../examples/publisher.md)
+   - [README](https://github.com/omnirexflora-labs/OmniDaemon/blob/main/README.md)
+
+2. **Search Issues**
+   - [Existing issues](https://github.com/omnirexflora-labs/OmniDaemon/issues)
+   - [Closed issues](https://github.com/omnirexflora-labs/OmniDaemon/issues?q=is%3Aissue+is%3Aclosed)
+
+3. **Ask the Community**
+   - [GitHub Discussions](https://github.com/omnirexflora-labs/OmniDaemon/discussions)
+   - Discord (coming soon)
+
+4. **Open an Issue**
+   - Provide minimal reproducible example
+   - Include environment details
+   - Be respectful and patient
+
+---
+
+## 🎓 Learning Resources
+
+### Understanding the Codebase
+
+Start with these files:
+1. `src/omnidaemon/sdk.py` - Main SDK interface
+2. `src/omnidaemon/agent_runner/runner.py` - Agent execution
+3. `src/omnidaemon/event_bus/redis_stream_bus.py` - Event bus implementation
+4. `src/omnidaemon/storage/redis_store.py` - Storage implementation
+
+### Recommended Reading
+
+- **[Event-Driven Architecture](../core-concepts/event-driven-architecture.md)**
+- **[System Architecture](../architecture/system-overview.md)**
+- **[Event Bus Deep Dive](../core-concepts/event-bus-architecture.md)**
+- **[Storage Deep Dive](../core-concepts/storage-architecture.md)**
+
+---
+
+## 📅 Release Process
+
+(For maintainers)
+
+1. **Version Bump**
+   ```bash
+   # Update version in pyproject.toml
+   vim pyproject.toml
+   ```
+
+2. **Changelog**
+   ```bash
+   # Update CHANGELOG.md
+   vim CHANGELOG.md
+   ```
+
+3. **Tag Release**
+   ```bash
+   git tag -a v0.2.0 -m "Release v0.2.0"
+   git push origin v0.2.0
+   ```
+
+4. **GitHub Release**
+   - Go to GitHub Releases
+   - Create new release from tag
+   - Add release notes
+   - Publish
+
+5. **PyPI Release**
+   ```bash
+   python -m build
+   python -m twine upload dist/*
+   ```
+
+---
+
+## 🙏 Thank You!
+
+Your contributions make OmniDaemon better for everyone. Whether it's code, documentation, or community support—every contribution matters.
+
+**Questions?** Open a [GitHub Discussion](https://github.com/omnirexflora-labs/OmniDaemon/discussions)
+
+---
+
+**Created by [Abiola Adeshina](https://github.com/Abiorh001) and the OmniDaemon Community**
+

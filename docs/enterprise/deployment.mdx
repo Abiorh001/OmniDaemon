@@ -1,0 +1,719 @@
+# Enterprise Deployment Guide
+
+Complete guide for deploying OmniDaemon in production enterprise environments.
+
+---
+
+## Deployment Overview
+
+OmniDaemon can be deployed across various environments:
+- **Cloud** (AWS, Azure, GCP)
+- **On-Premise** (Data centers, private cloud)
+- **Hybrid** (Mix of cloud and on-prem)
+- **Edge** (IoT, manufacturing, retail)
+
+---
+
+## Pre-Deployment Checklist
+
+### 1. **Infrastructure Requirements**
+
+**To Get Started (Minimum):**
+- 1 vCPU
+- 1GB RAM
+- 10GB storage
+- Redis server (for event bus + storage)
+
+**Production (Depends on Your Use Case):**
+
+*The requirements vary significantly based on:*
+- **Agent workload type**: I/O-bound (API calls, file ops) vs CPU-bound (ML inference, heavy computation)
+- **Event throughput**: Events per second your system processes
+- **Number of consumers**: Run one or more consumers per agent for load balancing (you decide based on your needs)
+
+*Realistic ranges:*
+- **Light I/O workloads**: 1-2 vCPU, 2-4GB RAM (handles most API-calling agents)
+- **Heavy computation**: 4-8 vCPU, 8-16GB RAM (ML inference, data processing)
+- **Redis server**: 2 vCPU, 4GB RAM (scales well for most workloads)
+- **Storage**: 20GB+ (depends on result retention and metrics volume)
+
+### 2. **Network Requirements**
+
+**What You Need (Current Implementation):**
+
+- **Port 6379** - Redis (for event bus + storage)
+- **Port 8765** (optional) - OmniDaemon API if you enable it
+
+**Connectivity:**
+- Your agent runners need to connect to Redis
+- Low latency connection is preferred but not required
+- If using multiple servers, keep them in same VPC/region for best performance
+
+**That's it!** Redis handles both event streaming and storage in the current implementation.
+
+### 3. **Security Requirements**
+
+- TLS certificates for encrypted connections
+- Credentials management (AWS Secrets Manager, HashiCorp Vault)
+- Network security groups/firewall rules
+- IAM roles/service accounts
+
+---
+
+## Deployment Architectures
+
+### 1. **Single Server (Getting Started)**
+
+**Best for:**
+- Development
+- Testing
+- Small-to-medium workloads (most I/O-bound use cases)
+
+**What You Actually Need:**
+```
+┌───────────────────────────────────────┐
+│    Single Server (1-2 vCPU, 2-4GB)    │
+│                                       │
+│  ┌─────────────────────┐              │
+│  │   Redis Server      │              │
+│  │   (Event Bus +      │              │
+│  │    Storage)         │              │
+│  └─────────────────────┘              │
+│            ↕                          │
+│  ┌─────────────────────┐              │
+│  │  Agent Runner       │              │
+│  │  (Your Python app)  │              │
+│  │  • Multiple         │              │
+│  │    consumers        │              │
+│  └─────────────────────┘              │
+│                                       │
+└───────────────────────────────────────┘
+```
+
+**Setup:**
+```bash
+# 1. Install Redis
+docker run -d -p 6379:6379 --name redis redis:latest
+
+# 2. Install OmniDaemon
+uv add omnidaemon
+
+# 3. Set environment
+export REDIS_URL=redis://localhost:6379
+export EVENT_BUS_TYPE=redis_stream
+export STORAGE_BACKEND=redis
+
+# 4. Run your agent runner
+python agent_runner.py
+```
+
+**Scaling on Single Server:**
+You can handle significant load on one server by:
+- Adding more consumers per agent (scale based on your workload)
+- Running multiple agent types on same runner
+- Redis can handle 100K+ ops/sec on modest hardware
+
+---
+
+### 2. **Multi-Server (Horizontal Scaling)**
+
+**When to scale horizontally:**
+- Single server hits resource limits (CPU/Memory)
+- Need high availability (failover protection)
+- Want to separate different agent types across servers
+
+**How horizontal scaling works:**
+- Each agent runner connects to the same Redis
+- Redis consumer groups automatically distribute work
+- **Just start more agent runner instances** - that's it!
+
+**Architecture:**
+```
+┌────────────────┐   ┌────────────────┐   ┌────────────────┐
+│  Runner 1      │   │  Runner 2      │   │  Runner N      │
+│  (1-2 vCPU)    │   │  (1-2 vCPU)    │   │  (1-2 vCPU)    │
+│  • FileAgent   │   │  • FileAgent   │   │  • EmailAgent  │
+│    (consumers) │   │    (consumers) │   │    (consumers) │
+└────────┬───────┘   └────────┬───────┘   └────────┬───────┘
+         │                    │                    │
+         └────────────────────┼────────────────────┘
+                              │
+                    ┌─────────▼──────────┐
+                    │   Redis Server     │
+                    │   (2 vCPU, 4GB)    │
+                    │   Event Bus +      │
+                    │   Storage          │
+                    └────────────────────┘
+```
+
+**Redis handles:**
+- Consumer group coordination (automatic work distribution)
+- Message persistence and replay
+- Load balancing across all consumers
+
+**Setup (Docker Compose):**
+```yaml
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+
+  runner-1:
+    build: .
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - EVENT_BUS_TYPE=redis_stream
+      - STORAGE_BACKEND=redis
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  runner-2:
+    build: .
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - EVENT_BUS_TYPE=redis_stream
+      - STORAGE_BACKEND=redis
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+```
+
+**Scaling strategy:**
+1. **Vertical first**: Add consumers per agent (scale based on your workload)
+2. **Horizontal next**: Add more runner instances (just start them - Redis handles coordination)
+3. **Redis scaling**: Only when Redis itself becomes bottleneck (rare for most use cases)
+
+---
+
+### 3. **Kubernetes (Cloud-Native)**
+
+**Best for:**
+- Auto-scaling
+- Cloud deployments (AWS/Azure/GCP)
+- Large-scale production
+
+**Architecture:**
+```
+┌────────────────────────────────────────────┐
+│         Kubernetes Cluster                 │
+│                                            │
+│  ┌──────────────────────────────────────┐ │
+│  │  OmniDaemon Deployment               │ │
+│  │  (ReplicaSet: 3 pods)                │ │
+│  │                                      │ │
+│  │  ┌────────┐ ┌────────┐ ┌────────┐  │ │
+│  │  │ Pod 1  │ │ Pod 2  │ │ Pod 3  │  │ │
+│  │  └───┬────┘ └───┬────┘ └───┬────┘  │ │
+│  └──────┼──────────┼──────────┼────────┘ │
+└─────────┼──────────┼──────────┼──────────┘
+          │          │          │
+          └──────────┴──────────┘
+                     │
+      ┌──────────────┴──────────────┐
+      │                             │
+      ▼                             ▼
+┌──────────────┐           ┌──────────────┐
+│AWS MSK       │           │  RDS         │
+│(Kafka)       │           │(PostgreSQL)  │
+└──────────────┘           └──────────────┘
+```
+
+**Kubernetes Manifests:**
+
+```yaml
+# deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: omnidaemon-runner
+  labels:
+    app: omnidaemon
+spec:
+  replicas: 2  # Start with 2, scale based on load
+  selector:
+    matchLabels:
+      app: omnidaemon
+  template:
+    metadata:
+      labels:
+        app: omnidaemon
+    spec:
+      containers:
+      - name: runner
+        image: your-registry/omnidaemon-runner:latest
+        env:
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: omnidaemon-secrets
+              key: redis-url
+        - name: EVENT_BUS_TYPE
+          value: "redis_stream"
+        - name: STORAGE_BACKEND
+          value: "redis"
+        resources:
+          requests:
+            memory: "1Gi"     # Start small, adjust based on workload
+            cpu: "500m"       # 0.5 CPU
+          limits:
+            memory: "2Gi"     # Max for safety
+            cpu: "1000m"      # 1 CPU max
+        livenessProbe:
+          exec:
+            command:
+            - python
+            - -c
+            - "from omnidaemon import OmniDaemonSDK; sdk = OmniDaemonSDK(); import asyncio; asyncio.run(sdk.health())"
+          initialDelaySeconds: 30
+          periodSeconds: 60
+---
+# hpa.yaml (Horizontal Pod Autoscaler)
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: omnidaemon-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: omnidaemon-runner
+  minReplicas: 2
+  maxReplicas: 10  # Adjust based on your needs
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+```
+
+---
+
+## Environment Configuration
+
+### Development
+```bash
+# .env.development
+EVENT_BUS_TYPE=redis_stream
+REDIS_URL=redis://localhost:6379
+STORAGE_BACKEND=redis
+OMNIDAEMON_LOG_LEVEL=DEBUG
+OMNIDAEMON_RECLAIM_INTERVAL=30
+OMNIDAEMON_DLQ_RETRY_LIMIT=3
+```
+
+### Production
+```bash
+# .env.production
+EVENT_BUS_TYPE=redis_stream
+REDIS_URL=redis://redis-cluster.internal:6379
+STORAGE_BACKEND=redis
+OMNIDAEMON_LOG_LEVEL=INFO
+OMNIDAEMON_RECLAIM_INTERVAL=60
+OMNIDAEMON_DLQ_RETRY_LIMIT=5
+OMNIDAEMON_METRICS_STREAM_MAXLEN=10000
+OMNIDAEMON_DEFAULT_MAXLEN=100000
+```
+
+---
+
+## High Availability Setup
+
+### Redis Cluster (Event Bus + Storage)
+
+```bash
+# Redis Sentinel for HA
+docker run -d --name redis-master redis:7
+docker run -d --name redis-replica-1 redis:7 --replicaof redis-master 6379
+docker run -d --name redis-replica-2 redis:7 --replicaof redis-master 6379
+docker run -d --name redis-sentinel-1 redis:7 redis-sentinel /sentinel.conf
+docker run -d --name redis-sentinel-2 redis:7 redis-sentinel /sentinel.conf
+docker run -d --name redis-sentinel-3 redis:7 redis-sentinel /sentinel.conf
+
+# Connection string
+export REDIS_URL=redis-sentinel://sentinel-host:26379/mymaster
+```
+
+### Load Balancing
+
+```nginx
+# nginx.conf (for API)
+upstream omnidaemon_api {
+    least_conn;
+    server runner-1:8765;
+    server runner-2:8765;
+    server runner-3:8765;
+}
+
+server {
+    listen 80;
+    location / {
+        proxy_pass http://omnidaemon_api;
+        proxy_set_header Host $host;
+    }
+}
+```
+
+---
+
+## Monitoring & Observability
+
+### Health Checks
+
+```python
+# healthcheck.py
+import asyncio
+from omnidaemon import OmniDaemonSDK
+
+async def health_check():
+    sdk = OmniDaemonSDK()
+    health = await sdk.health()
+    
+    if health["status"] != "running":
+        exit(1)  # Fail health check
+    
+    if health["event_bus"]["status"] != "healthy":
+        exit(1)
+    
+    if health["storage"]["status"] != "healthy":
+        exit(1)
+    
+    print("✅ Healthy")
+    exit(0)
+
+asyncio.run(health_check())
+```
+
+### Metrics Collection
+
+```python
+# metrics_exporter.py (Prometheus format)
+import asyncio
+from omnidaemon import OmniDaemonSDK
+from prometheus_client import Gauge, start_http_server
+
+# Define Prometheus metrics
+tasks_received = Gauge('omnidaemon_tasks_received', 'Total tasks received', ['topic', 'agent'])
+tasks_processed = Gauge('omnidaemon_tasks_processed', 'Total tasks processed', ['topic', 'agent'])
+tasks_failed = Gauge('omnidaemon_tasks_failed', 'Total tasks failed', ['topic', 'agent'])
+avg_processing_time = Gauge('omnidaemon_avg_processing_time_ms', 'Average processing time', ['topic', 'agent'])
+
+async def collect_metrics():
+    sdk = OmniDaemonSDK()
+    while True:
+        metrics = await sdk.get_metrics()
+        
+        for topic, agents in metrics.items():
+            for agent, stats in agents.items():
+                tasks_received.labels(topic, agent).set(stats['tasks_received'])
+                tasks_processed.labels(topic, agent).set(stats['tasks_processed'])
+                tasks_failed.labels(topic, agent).set(stats['tasks_failed'])
+                avg_processing_time.labels(topic, agent).set(stats['avg_processing_time_ms'])
+        
+        await asyncio.sleep(15)  # Update every 15 seconds
+
+# Start Prometheus metrics server
+start_http_server(9090)
+asyncio.run(collect_metrics())
+```
+
+---
+
+## Security Best Practices
+
+### 1. **Credential Management**
+
+**AWS Secrets Manager:**
+```python
+import boto3
+import json
+
+def get_redis_url():
+    client = boto3.client('secretsmanager', region_name='us-east-1')
+    secret = client.get_secret_value(SecretId='prod/omnidaemon/redis')
+    return json.loads(secret['SecretString'])['REDIS_URL']
+
+# Use in your agent
+os.environ['REDIS_URL'] = get_redis_url()
+```
+
+**HashiCorp Vault:**
+```python
+import hvac
+
+client = hvac.Client(url='https://vault.internal:8200')
+client.auth.approle.login(role_id='...', secret_id='...')
+
+redis_url = client.secrets.kv.v2.read_secret_version(path='omnidaemon/redis')['data']['data']['url']
+os.environ['REDIS_URL'] = redis_url
+```
+
+### 2. **Network Security**
+
+```yaml
+# AWS Security Group (Terraform)
+resource "aws_security_group" "omnidaemon_runner" {
+  name = "omnidaemon-runner"
+
+  # Allow outbound to Redis
+  egress {
+    from_port   = 6379
+    to_port     = 6379
+    protocol    = "tcp"
+    cidr_blocks = ["10.0.1.0/24"]  # Redis subnet
+  }
+
+  # Deny all inbound (runners don't need incoming)
+  ingress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = []
+  }
+}
+```
+
+### 3. **TLS/SSL**
+
+```bash
+# Redis with TLS
+export REDIS_URL=rediss://redis.internal:6380?ssl_cert_reqs=required&ssl_ca_certs=/etc/ssl/certs/ca.pem
+
+# Kafka with SSL
+export KAFKA_BOOTSTRAP_SERVERS=kafka.internal:9093
+export KAFKA_SECURITY_PROTOCOL=SSL
+export KAFKA_SSL_CAFILE=/etc/ssl/certs/ca.pem
+export KAFKA_SSL_CERTFILE=/etc/ssl/certs/client.pem
+export KAFKA_SSL_KEYFILE=/etc/ssl/private/client-key.pem
+```
+
+---
+
+## Performance Tuning
+
+### 1. **Agent Runner Optimization**
+
+```bash
+# Increase reclaim interval for lower overhead
+export OMNIDAEMON_RECLAIM_INTERVAL=120  # 2 minutes
+
+# Increase message batch size (Redis)
+export OMNIDAEMON_BATCH_SIZE=100
+
+# Increase stream max length
+export OMNIDAEMON_DEFAULT_MAXLEN=1000000  # 1M messages
+```
+
+### 2. **Python Performance**
+
+```python
+# Use uvloop for faster asyncio
+import uvloop
+uvloop.install()
+
+# Optimize Python runtime
+export PYTHONOPTIMIZE=2
+export PYTHONDONTWRITEBYTECODE=1
+```
+
+### 3. **Resource Limits**
+
+```yaml
+# Kubernetes resource limits
+resources:
+  requests:
+    memory: "4Gi"
+    cpu: "2"
+  limits:
+    memory: "8Gi"  # Allow headroom
+    cpu: "4"       # Burst capacity
+```
+
+---
+
+## Disaster Recovery
+
+### 1. **Backup Strategy**
+
+```bash
+# Redis backup (RDB + AOF)
+redis-cli BGSAVE
+redis-cli BGREWRITEAOF
+
+# Automated backups (cron)
+0 */6 * * * /usr/local/bin/backup-redis.sh  # Every 6 hours
+```
+
+### 2. **Restore Procedure**
+
+```bash
+# 1. Stop agent runners
+kubectl scale deployment omnidaemon-runner --replicas=0
+
+# 2. Restore Redis data
+cp backup.rdb /var/lib/redis/dump.rdb
+
+# 3. Restart Redis
+systemctl restart redis
+
+# 4. Restart runners
+kubectl scale deployment omnidaemon-runner --replicas=3
+
+# 5. Verify health
+omnidaemon health
+```
+
+### 3. **Stream Replay**
+
+```python
+# Replay events after data loss
+from datetime import datetime, timedelta
+
+# Replay last 24 hours
+start_time = datetime.now() - timedelta(days=1)
+await sdk.replay_stream(
+    topic="critical.events",
+    start_time=start_time
+)
+```
+
+---
+
+## CI/CD Pipeline
+
+### GitHub Actions
+
+```yaml
+# .github/workflows/deploy.yml
+name: Deploy OmniDaemon
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - run: uv sync
+      - run: pytest tests/
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: docker/build-push-action@v4
+        with:
+          push: true
+          tags: myregistry/omnidaemon-runner:${{ github.sha }}
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: azure/k8s-set-context@v3
+        with:
+          kubeconfig: ${{ secrets.KUBE_CONFIG }}
+      - run: |
+          kubectl set image deployment/omnidaemon-runner \
+            runner=myregistry/omnidaemon-runner:${{ github.sha }}
+      - run: kubectl rollout status deployment/omnidaemon-runner
+```
+
+---
+
+## Troubleshooting
+
+### Common Issues
+
+**1. Agent not receiving messages:**
+```bash
+# Check consumer group exists
+omnidaemon bus groups --topic your.topic
+
+# Check stream has messages
+omnidaemon bus inspect --stream your.topic
+
+# Check agent registration
+omnidaemon agent list
+```
+
+**2. High memory usage:**
+```bash
+# Check stream max length
+redis-cli XINFO STREAM your.topic
+
+# Trim old messages
+redis-cli XTRIM your.topic MAXLEN ~ 10000
+
+# Or set env variable
+export OMNIDAEMON_DEFAULT_MAXLEN=10000
+```
+
+**3. Slow processing:**
+```bash
+# Check metrics
+omnidaemon metrics
+
+# Check DLQ for failures
+omnidaemon bus dlq --topic your.topic
+
+# Profile your agent callback
+python -m cProfile agent_runner.py
+```
+
+---
+
+## Production Checklist
+
+Before going live:
+
+- [ ] Load testing completed (target: 2x expected load)
+- [ ] Health checks configured
+- [ ] Monitoring dashboards set up
+- [ ] Alerts configured (PagerDuty, Slack)
+- [ ] Backup/restore tested
+- [ ] Disaster recovery plan documented
+- [ ] Security audit completed
+- [ ] TLS/SSL enabled
+- [ ] Secrets management configured
+- [ ] CI/CD pipeline working
+- [ ] Runbook created for on-call team
+- [ ] Performance tuning applied
+- [ ] Auto-scaling tested
+- [ ] Documentation updated
+
+---
+
+## Next Steps
+
+- **[Use Cases](./use-cases.md)** - Real-world enterprise scenarios
+- **[Monitoring Guide](../how-to-guides/monitoring.md)** - CLI monitoring tools
+- **[Configuration](../how-to-guides/configuration.md)** - Environment variables
+
+---
+
+**Need help with deployment?** [Contact us](https://mintify.com) for enterprise support.
+

@@ -49,7 +49,6 @@ class RedisStreamEventBus:
 
     async def close(self):
         self._running = False
-        # cancel consumer tasks
         for meta in list(self._consumers.values()):
             t = meta.get("task")
             r = meta.get("reclaim_task")
@@ -65,7 +64,7 @@ class RedisStreamEventBus:
 
     async def publish(
         self, event_payload: Dict[str, Any], maxlen: Optional[int] = None
-    ) -> None:
+    ) -> str:
         """
         Publish message to omni-stream:{topic}.
         Returns the assigned stream id.
@@ -78,8 +77,12 @@ class RedisStreamEventBus:
         data = {
             "content": event_payload.get("payload", {}).get("content"),
             "webhook": event_payload.get("payload", {}).get("webhook"),
+            "reply_to": event_payload.get("payload", {}).get("reply_to"),
             "topic": topic,
             "task_id": event_payload.get("id"),
+            "correlation_id": event_payload.get("correlation_id"),
+            "causation_id": event_payload.get("causation_id"),
+            "source": event_payload.get("source"),
             "delivery_attempts": event_payload.get("delivery_attempts", 0),
             "created_at": event_payload.get("created_at", time.time()),
         }
@@ -90,6 +93,7 @@ class RedisStreamEventBus:
             stream_name, {"data": payload}, maxlen=maxlen, approximate=True
         )
         logger.debug(f"[RedisStreamBus] published {stream_name} id={msg_id}")
+        return event_payload.get("id", "N/A")
 
     async def subscribe(
         self,
@@ -116,7 +120,7 @@ class RedisStreamEventBus:
         group = group_name or (f"group:{topic}:{agent_name}")
         consumer = consumer_name or f"consumer:{agent_name}"
         dlq_stream = f"omni-dlq:{group}"
-        # create group if not exists
+
         try:
             await self._redis.xgroup_create(stream_name, group, id="$", mkstream=True)
             logger.info(f"[RedisStreamBus] created group {group} for {stream_name}")
@@ -207,12 +211,10 @@ class RedisStreamEventBus:
                                 payload = json.loads(raw)
                             except Exception:
                                 payload = {"raw": raw}
-                            # Mark as in-flight this will help us prevent duplicate processing if the idle time kicks in during processing to avoid the reclaim loop picking it up
                             if group not in self._in_flight:
                                 self._in_flight[group] = set()
                             self._in_flight[group].add(msg_id)
                             try:
-                                # lets add the consumer name to process the event to the payload just for logging
                                 payload["processing_consumer"] = consumer
                                 if asyncio.iscoroutinefunction(callback):
                                     await callback(payload)
@@ -220,7 +222,6 @@ class RedisStreamEventBus:
                                     loop = asyncio.get_running_loop()
                                     await loop.run_in_executor(None, callback, payload)
                                 await self._redis.xack(stream_name, group, msg_id)
-                                # publish monitor metric
                                 await self._emit_monitor(
                                     {
                                         "topic": topic,
@@ -236,12 +237,21 @@ class RedisStreamEventBus:
                                     f"[RedisStreamBus] callback error topic={topic} id={msg_id}: {cb_err}"
                                 )
                             finally:
-                                # either success or failure, remove from in-flight so it can either be reclaimed
                                 self._in_flight[group].discard(msg_id)
 
                 except asyncio.CancelledError:
-                    raise
+                    logger.info(
+                        f"[RedisStreamBus] consume loop cancelled topic={topic}"
+                    )
+                    break
                 except Exception as err:
+                    err_msg = str(err).lower()
+                    if "connection closed" in err_msg or "connection reset" in err_msg:
+                        logger.info(
+                            f"[RedisStreamBus] connection closed for topic={topic}, stopping loop"
+                        )
+                        break
+
                     logger.exception(
                         f"[RedisStreamBus] error in consume loop topic={topic}: {err}"
                     )
@@ -291,14 +301,10 @@ class RedisStreamEventBus:
 
                         if not msg_id or idle < reclaim_idle_ms:
                             continue
-                        # the task is still being processed by the consumer, skip reclaim to avoid duplicate processing
                         if (
                             group in self._in_flight
                             and msg_id in self._in_flight[group]
                         ):
-                            # logger.debug(
-                            #     f"[RedisStreamBus] Skipping reclaim of {msg_id}: still in-flight"
-                            # )
                             print(
                                 f"[RedisStreamBus] Skipping reclaim of {msg_id}: still in-flight"
                             )
@@ -318,9 +324,6 @@ class RedisStreamEventBus:
                         if not claimed:
                             continue
 
-                        # logger.info(
-                        #     f"[RedisStreamBus] reclaimed {msg_id} (idle={idle}ms) for group {group}"
-                        # )
                         print(
                             f"[RedisStreamBus] reclaimed {msg_id} (idle={idle}ms) for group {group}"
                         )
@@ -352,7 +355,6 @@ class RedisStreamEventBus:
                                 logger.error(
                                     f"[RedisStreamBus] Max delivery attempts ({1 + dlq_retry_limit}) exceeded for {_id} after {dlq_retry_limit} retries. Sending to DLQ."
                                 )
-                                # lets ensure we update the payload with the delivery attempts before sending to DLQ, but first adjust because we incremented before checking
                                 retry_count -= 1
                                 payload["delivery_attempts"] += retry_count
                                 await self._send_to_dlq(
@@ -380,9 +382,7 @@ class RedisStreamEventBus:
                                     logger.info(
                                         f"[RedisStreamBus] Retry #{retry_count} for {_id} in group {group}"
                                     )
-                                    # increment the delivery attempts in the payload
                                     payload["delivery_attempts"] += retry_count
-                                    # lets add the consumer name to process the event to the payload just for logging
                                     payload["processing_consumer"] = consumer
                                     if asyncio.iscoroutinefunction(callback):
                                         await callback(payload)
@@ -416,8 +416,16 @@ class RedisStreamEventBus:
                 await asyncio.sleep(self.reclaim_interval)
 
             except asyncio.CancelledError:
+                logger.info(f"[RedisStreamBus] reclaim loop cancelled topic={topic}")
                 break
             except Exception as e:
+                err_msg = str(e).lower()
+                if "connection closed" in err_msg or "connection reset" in err_msg:
+                    logger.info(
+                        f"[RedisStreamBus] connection closed in reclaim loop topic={topic}, stopping"
+                    )
+                    break
+
                 logger.exception(f"[RedisStreamBus] reclaim loop error: {e}")
                 await asyncio.sleep(self.reclaim_interval)
 
@@ -462,7 +470,6 @@ class RedisStreamEventBus:
         This is the single source of truth for all events.
         """
         try:
-            # Write to metrics stream
             await self._redis.xadd(
                 "omni-metrics",
                 {"data": json.dumps(metric, default=str)},
@@ -495,13 +502,11 @@ class RedisStreamEventBus:
         if not meta:
             return
 
-        # Cancel all tasks
         for task in meta["consume_tasks"]:
             task.cancel()
         for task in meta["reclaim_tasks"]:
             task.cancel()
 
-        # Remove from registry
         del self._consumers[group_name]
 
         logger.info(f"[RedisStreamBus] Stopped consumption for {group_name}")
@@ -524,5 +529,70 @@ class RedisStreamEventBus:
             logger.info(f"[RedisStreamBus] DLQ preserved at {dlq_name}")
 
     async def get_consumers(self) -> Dict[str, Any]:
-        """Return current consumers and their configurations."""
-        return self._consumers
+        """
+        Return current consumers and their configurations.
+
+        This queries Redis directly for actual consumer groups,
+        so it works even from new instances (like CLI).
+        """
+        if not self._redis:
+            await self.connect()
+
+        if self._consumers:
+            return self._consumers
+
+        discovered_consumers = {}
+
+        try:
+            stream_pattern = "omni-stream:*"
+            cursor = 0
+            stream_keys = []
+
+            while True:
+                cursor, keys = await self._redis.scan(
+                    cursor, match=stream_pattern, count=100
+                )
+                stream_keys.extend(
+                    [k.decode() if isinstance(k, bytes) else k for k in keys]
+                )
+                if cursor == 0:
+                    break
+
+            for stream_key in stream_keys:
+                try:
+                    topic = stream_key.replace("omni-stream:", "")
+                    groups_info = await self._redis.xinfo_groups(stream_key)
+
+                    for group_info in groups_info:
+                        group_name = (
+                            group_info.get(b"name", b"").decode()
+                            if isinstance(group_info.get(b"name"), bytes)
+                            else group_info.get("name", "")
+                        )
+                        consumers_count = (
+                            group_info.get(b"consumers", 0)
+                            if isinstance(group_info.get(b"consumers"), bytes)
+                            else group_info.get("consumers", 0)
+                        )
+                        pending = (
+                            group_info.get(b"pending", 0)
+                            if isinstance(group_info.get(b"pending"), bytes)
+                            else group_info.get("pending", 0)
+                        )
+
+                        if group_name:
+                            discovered_consumers[group_name] = {
+                                "topic": topic,
+                                "stream": stream_key,
+                                "consumers_count": consumers_count,
+                                "pending_messages": pending,
+                                "source": "redis_query",
+                            }
+                except Exception as e:
+                    logger.debug(f"Failed to get consumer groups for {stream_key}: {e}")
+                    continue
+
+        except Exception as e:
+            logger.warning(f"Failed to discover consumers from Redis: {e}")
+
+        return discovered_consumers

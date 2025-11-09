@@ -1,30 +1,16 @@
-# app.py
-from fastapi import FastAPI, status, Request
+from fastapi import FastAPI, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Dict, Any, Optional
 import logging
 from contextlib import asynccontextmanager
 
-from decouple import config
+from omnidaemon import OmniDaemonSDK, AgentConfig, SubscriptionConfig, EventEnvelope, PayloadBase
+from omnicoreagent import OmniAgent, MemoryRouter, EventRouter
 
-from omnidaemon.result_store import RedisResultStore
-from omnidaemon.sdk import OmniDaemonSDK
-from omnicoreagent import OmniAgent, ToolRegistry, MemoryRouter, EventRouter
-
-
-# ----------------------------
-# Configuration & Globals
-# ----------------------------
 logger = logging.getLogger(__name__)
 
-sdk = OmniDaemonSDK(
-    result_store=RedisResultStore(
-        redi_url=config("REDIS_URL", default="redis://localhost")
-    )
-)
-
-tool_registry = ToolRegistry()
+sdk = OmniDaemonSDK()
 
 MCP_TOOLS = [
     {
@@ -38,13 +24,9 @@ MCP_TOOLS = [
     },
 ]
 
-# Agent runner instance (managed in lifespan)
 filesystem_agent_runner: Optional["OmniAgentRunner"] = None
 
 
-# ----------------------------
-# Agent Runner Class
-# ----------------------------
 class OmniAgentRunner:
     def __init__(self):
         self.agent: Optional[OmniAgent] = None
@@ -56,7 +38,8 @@ class OmniAgentRunner:
     async def initialize(self):
         if self.connected:
             return
-        logger.info("🚀 Initializing OmniAgent...")
+
+        logger.info("Initializing OmniAgent...")
         self.memory_router = MemoryRouter("in_memory")
         self.event_router = EventRouter("in_memory")
 
@@ -89,11 +72,12 @@ class OmniAgentRunner:
         )
         await self.agent.connect_mcp_servers()
         self.connected = True
-        logger.info("✅ OmniAgent initialized successfully")
+        logger.info("OmniAgent initialized successfully")
 
     async def handle_chat(self, message: str) -> str:
         if not self.agent:
             raise RuntimeError("Agent not initialized")
+
         if not self.session_id:
             from datetime import datetime
 
@@ -111,57 +95,47 @@ class OmniAgentRunner:
                 logger.warning(f"{self.agent.name}: MCP cleanup failed: {exc}")
 
 
-# ----------------------------
-# Lifespan (Startup / Shutdown)
-# ----------------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global filesystem_agent_runner
 
-    # --- Startup ---
     logger.info("Starting OmniDaemon FastAPI server...")
 
-    # Initialize agent runner
     filesystem_agent_runner = OmniAgentRunner()
     await filesystem_agent_runner.initialize()
 
-    # Register agent with SDK
     async def call_file_system_agent(message: Dict[str, Any]):
-        logger.info("📁 Filesystem agent received task")
+        logger.info("Filesystem agent received task")
         if filesystem_agent_runner is None:
             raise RuntimeError("Agent runner not ready")
         response = await filesystem_agent_runner.handle_chat(message.get("content", ""))
-        print(f"this is response: {response}")
         return {"status": "success", "data": response}
 
     await sdk.register_agent(
-        name="OMNICOREAGENT_FILESYSTEM_AGENT",
-        topic="file_system.tasks",
-        callback=call_file_system_agent,
-        agent_config={
-            "description": "Help the user manage their files. You can list files, read files, etc.",
-        },
+        agent_config=AgentConfig(
+            name="OMNICOREAGENT_FILESYSTEM_AGENT",
+            topic="file_system.tasks",
+            callback=call_file_system_agent,
+            description="Help the user manage their files. You can list files, read files, etc.",
+            tools=[],
+            config=SubscriptionConfig(
+                reclaim_idle_ms=6000, dlq_retry_limit=3, consumer_count=3
+            ),
+        )
     )
 
-    # Start SDK message listener
     await sdk.start()
-    logger.info("✅ OmniDaemon SDK started")
+    logger.info("OmniDaemon SDK started")
 
-    # Optional: Start internal API server if needed (not required here)
+    yield
 
-    yield  # <-- App runs here
-
-    # --- Shutdown ---
     logger.info("Shutting down OmniDaemon...")
-    await sdk.stop()
+    await sdk.shutdown()
     if filesystem_agent_runner and filesystem_agent_runner.agent:
         await filesystem_agent_runner.shutdown()
-    logger.info("✅ Shutdown complete")
+    logger.info("Shutdown complete")
 
 
-# ----------------------------
-# FastAPI App
-# ----------------------------
 app = FastAPI(
     title="OmniDaemon Filesystem Agent",
     description="FastAPI wrapper for OmniCore filesystem agent with webhook callbacks",
@@ -169,13 +143,11 @@ app = FastAPI(
 )
 
 
-# ----------------------------
-# Schemas
-# ----------------------------
 class TaskResponse(BaseModel):
     status: str
     topic: str
     message: str
+    task_id: Optional[str] = None
 
 
 class AgentResultCallback(BaseModel):
@@ -184,56 +156,55 @@ class AgentResultCallback(BaseModel):
 
 class FileSystemTaskRequest(BaseModel):
     content: str
-    webhook: Optional[str] = None  # Optional: override default callback
+    webhook: Optional[str] = None
+    reply_to: Optional[str] = None
+    correlation_id: Optional[str] = None
+    tenant_id: Optional[str] = None
 
 
-# ----------------------------
-# Callback Endpoint (for agent results)
-# ----------------------------
 @app.post("/filesystem_agent_result", status_code=status.HTTP_200_OK)
 async def filesystem_agent_callback(data: AgentResultCallback):
-    """Webhook endpoint where agent posts its final result."""
     payload = data.payload
-    print(f"📁 Filesystem Agent Result: {payload}")
-    # logger.info(f"📁 Filesystem Agent Result: {payload}")
-    # You can forward to user's webhook here if needed
+    logger.info(f"Filesystem Agent Result: {payload}")
     return {"status": "received"}
 
 
-# ----------------------------
-# User Task Trigger
-# ----------------------------
 @app.post(
     "/run_filesystem_task",
     response_model=TaskResponse,
     status_code=status.HTTP_202_ACCEPTED,
 )
 async def run_filesystem_task(task: FileSystemTaskRequest):
-    """
-    Trigger the filesystem agent to perform file operations.
-    """
-    payload = {
-        "content": task.content,
-        "webhook": task.webhook or "http://localhost:8000/filesystem_agent_result",
-    }
-    await sdk.publish_task("file_system.tasks", payload)
+    event_envelope = EventEnvelope(
+        topic="file_system.tasks",
+        payload=PayloadBase(
+            content=task.content,
+            webhook=task.webhook or "http://localhost:8000/filesystem_agent_result",
+            reply_to=task.reply_to,
+        ),
+        correlation_id=task.correlation_id,
+        tenant_id=task.tenant_id,
+    )
+
+    task_id = await sdk.publish_task(event_envelope=event_envelope)
+
     return TaskResponse(
         status="queued",
         topic="file_system.tasks",
         message="Filesystem task queued for processing.",
+        task_id=task_id,
     )
 
 
-# ----------------------------
-# Health Check
-# ----------------------------
 @app.get("/health")
 async def health_check():
+    health = await sdk.health()
     return {
-        "status": "ok",
+        "status": health.get("status", "unknown"),
         "agent_ready": bool(
             filesystem_agent_runner and filesystem_agent_runner.connected
         ),
+        "uptime_seconds": health.get("uptime_seconds", 0),
     }
 
 
