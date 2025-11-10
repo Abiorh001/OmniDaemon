@@ -47,7 +47,7 @@ class RedisStreamEventBus:
 
     def __init__(
         self,
-        redis_url: str = config("REDIS_URL"),
+        redis_url: str = config("REDIS_URL", default="redis://localhost:6379"),
         default_maxlen: int = 10_000,
         reclaim_interval: int = 30,
         default_reclaim_idle_ms: int = 180_000,
