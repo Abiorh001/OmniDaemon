@@ -1,5 +1,5 @@
 import asyncio
-from omnidaemon import OmniDaemonSDK, AgentConfig, EventEnvelope, PayloadBase
+from omnidaemon import OmniDaemonSDK, EventEnvelope, PayloadBase
 
 sdk = OmniDaemonSDK()
 

@@ -12,11 +12,37 @@ logger.setLevel(logging.INFO)
 
 class RedisStreamEventBus:
     """
-    Redis Streams Event Bus (production-ready):
-    - Uses Redis Streams for durable, reliable messaging.
-    - Supports consumer groups for load balancing and fault tolerance.
-    - Implements message reclaiming and dead-letter queues (DLQ).
-    - Emits monitoring metrics to a dedicated stream.
+    Redis Streams Event Bus implementation for production use.
+
+    This implementation uses Redis Streams to provide durable, reliable messaging
+    with advanced features for production deployments.
+
+    Features:
+        - Durable messaging: Messages are persisted in Redis Streams
+        - Consumer groups: Support for load balancing and fault tolerance
+        - Message reclaiming: Automatic retry of stuck messages
+        - Dead-letter queues (DLQ): Failed messages after max retries
+        - Monitoring: Emits metrics to a dedicated Redis stream
+        - Auto-reconnection: Handles connection failures gracefully
+
+    Args:
+        redis_url: Redis connection URL (default: from REDIS_URL env var)
+        default_maxlen: Maximum number of messages to keep in streams (default: 10,000)
+        reclaim_interval: Seconds between reclaim attempts (default: 30)
+        default_reclaim_idle_ms: Milliseconds before a pending message is reclaimed (default: 180,000)
+        default_dlq_retry_limit: Maximum retry attempts before sending to DLQ (default: 3)
+
+    Attributes:
+        redis_url: Redis connection URL
+        default_maxlen: Default maximum stream length
+        reclaim_interval: Reclaim loop interval in seconds
+        default_reclaim_idle_ms: Default idle time before reclaim
+        default_dlq_retry_limit: Default DLQ retry limit
+        _redis: Redis client instance
+        _connect_lock: Lock for connection operations
+        _consumers: Dictionary of active consumer groups
+        _in_flight: Dictionary tracking messages currently being processed
+        _running: Whether the event bus is active
     """
 
     def __init__(
@@ -26,7 +52,7 @@ class RedisStreamEventBus:
         reclaim_interval: int = 30,
         default_reclaim_idle_ms: int = 180_000,
         default_dlq_retry_limit: int = 3,
-    ):
+    ) -> None:
         self.redis_url = redis_url
         self.default_maxlen = default_maxlen
         self.reclaim_interval = reclaim_interval
@@ -40,22 +66,42 @@ class RedisStreamEventBus:
         self._in_flight: Dict[str, set] = {}
         self._running = False
 
-    async def connect(self):
+    async def connect(self) -> None:
+        """
+        Establish connection to Redis.
+
+        This method creates a Redis client connection. It is idempotent and thread-safe
+        using a connection lock.
+
+        Raises:
+            ConnectionError: If Redis connection fails
+        """
         async with self._connect_lock:
             if self._redis:
                 return
             self._redis = aioredis.from_url(self.redis_url, decode_responses=True)
             logger.info(f"[RedisStreamBus] connected: {self.redis_url}")
 
-    async def close(self):
+    async def close(self) -> None:
+        """
+        Close Redis connection and stop all consumers.
+
+        This method gracefully shuts down the event bus by:
+        1. Setting _running to False to stop all loops
+        2. Cancelling all consume and reclaim tasks
+        3. Closing the Redis connection
+
+        Note:
+            This method is idempotent and safe to call multiple times.
+        """
         self._running = False
         for meta in list(self._consumers.values()):
-            t = meta.get("task")
-            r = meta.get("reclaim_task")
-            if t:
-                t.cancel()
-            if r:
-                r.cancel()
+            consume_tasks = meta.get("consume_tasks", [])
+            reclaim_tasks = meta.get("reclaim_tasks", [])
+            for task in consume_tasks:
+                task.cancel()
+            for task in reclaim_tasks:
+                task.cancel()
 
         if self._redis:
             await self._redis.close()
@@ -66,11 +112,33 @@ class RedisStreamEventBus:
         self, event_payload: Dict[str, Any], maxlen: Optional[int] = None
     ) -> str:
         """
-        Publish message to omni-stream:{topic}.
-        Returns the assigned stream id.
+        Publish an event message to a Redis stream.
+
+        This method publishes a message to the stream named `omni-stream:{topic}`.
+        The stream length is automatically managed using the maxlen parameter.
+
+        Args:
+            event_payload: Dictionary containing event data. Must include:
+                - topic: The topic name to publish to
+                - id: Optional task ID
+                - payload: Dictionary with content, webhook, reply_to, etc.
+                - correlation_id: Optional correlation ID
+                - causation_id: Optional causation ID
+                - source: Optional source identifier
+                - delivery_attempts: Optional delivery attempt counter
+            maxlen: Maximum stream length (default: self.default_maxlen)
+
+        Returns:
+            The task ID from event_payload (or "N/A" if not provided)
+
+        Raises:
+            ValueError: If event_payload is missing the 'topic' field
+            ConnectionError: If Redis is not connected
         """
         if not self._redis:
             await self.connect()
+        assert self._redis is not None  # Type narrowing after connect
+
         topic = event_payload.get("topic")
         if not topic:
             raise ValueError("Event payload must include 'topic' field")
@@ -99,17 +167,42 @@ class RedisStreamEventBus:
         self,
         topic: str,
         agent_name: str,
-        callback: Callable[[dict], Any],
+        callback: Callable[[Dict[str, Any]], Any],
         group_name: Optional[str] = None,
         consumer_name: Optional[str] = None,
         config: Dict[str, Any] = {},
-    ):
+    ) -> None:
         """
-        Subscribe a callback to topic. Default behavior creates a unique group
-        per subscription (fan-out).
+        Subscribe an agent callback to a topic using Redis consumer groups.
+
+        This method creates a consumer group (if it doesn't exist) and starts
+        consuming messages from the specified topic. It supports multiple concurrent
+        consumers for load balancing and automatic message reclaiming for fault tolerance.
+
+        Args:
+            topic: The topic name to subscribe to
+            agent_name: Unique identifier for the agent/consumer
+            callback: Callable function to process messages. Can be async or sync.
+            group_name: Optional custom consumer group name. If not provided,
+                       defaults to `group:{topic}:{agent_name}`
+            consumer_name: Optional custom consumer name. If not provided,
+                          defaults to `consumer:{agent_name}`
+            config: Optional configuration dictionary:
+                - consumer_count: Number of concurrent consumers (default: 1)
+                - reclaim_idle_ms: Milliseconds before reclaiming pending messages
+                - dlq_retry_limit: Maximum retries before sending to DLQ
+
+        Note:
+            Each consumer runs in its own asyncio task. The reclaim loop also runs
+            in a separate task to handle stuck messages.
+
+        Raises:
+            ConnectionError: If Redis is not connected
         """
         if not self._redis:
             await self.connect()
+        assert self._redis is not None  # Type narrowing after connect
+
         reclaim_idle_ms = config.get("reclaim_idle_ms")
         dlq_retry_limit = config.get("dlq_retry_limit")
         consumer_count = int(config.get("consumer_count", 1))
@@ -183,15 +276,35 @@ class RedisStreamEventBus:
         topic: str,
         group: str,
         consumer: str,
-        callback: Callable,
-    ):
+        callback: Callable[[Dict[str, Any]], Any],
+    ) -> None:
         """
-        Loop reading from group (XREADGROUP) and calling callback.
-        On failure the message is left pending entries list for reclaim.
+        Main consumption loop for a consumer in a consumer group.
+
+        This method continuously reads messages from the Redis stream using XREADGROUP,
+        processes them through the callback, and acknowledges successful processing.
+        Failed messages remain in the pending entries list for the reclaim loop to handle.
+
+        Args:
+            stream_name: The Redis stream name (e.g., "omni-stream:topic")
+            topic: The logical topic name
+            group: The consumer group name
+            consumer: The consumer name within the group
+            callback: The callback function to process messages
+
+        Note:
+            - Messages are read in batches of up to 10
+            - Blocking read with 5-second timeout
+            - Supports both async and sync callbacks
+            - Automatically handles connection failures
         """
         logger.info(
             f"[RedisStreamBus] consumer loop start topic={topic} group={group} consumer={consumer}"
         )
+        if not self._redis:
+            await self.connect()
+        assert self._redis is not None  # Type narrowing after connect
+
         try:
             while self._running:
                 try:
@@ -265,11 +378,37 @@ class RedisStreamEventBus:
         topic: str,
         group: str,
         consumer: str,
-        callback: Callable,
+        callback: Callable[[Dict[str, Any]], Any],
         reclaim_idle_ms: Optional[int] = None,
         dlq_retry_limit: Optional[int] = None,
-    ):
+    ) -> None:
+        """
+        Reclaim loop for handling stuck/pending messages.
+
+        This method periodically checks for pending messages that have been idle
+        for longer than reclaim_idle_ms. It attempts to reprocess them, and if
+        they exceed the retry limit, sends them to the dead-letter queue.
+
+        Args:
+            stream_name: The Redis stream name
+            topic: The logical topic name
+            group: The consumer group name
+            consumer: The consumer name handling reclaims
+            callback: The callback function to retry processing
+            reclaim_idle_ms: Milliseconds before a message is considered stuck
+            dlq_retry_limit: Maximum retry attempts before sending to DLQ
+
+        Note:
+            - Runs every reclaim_interval seconds
+            - Checks up to 50 pending messages per iteration
+            - Tracks retry counts in Redis hash
+            - Automatically handles connection failures
+        """
         logger.info(f"[RedisStreamBus] reclaim loop start topic={topic} group={group}")
+        if not self._redis:
+            await self.connect()
+        assert self._redis is not None  # Type narrowing after connect
+
         retry_key = f"retry_counts:{group}"
         reclaim_idle_ms = reclaim_idle_ms or self.default_reclaim_idle_ms
         dlq_retry_limit = dlq_retry_limit or self.default_dlq_retry_limit
@@ -305,11 +444,11 @@ class RedisStreamEventBus:
                             group in self._in_flight
                             and msg_id in self._in_flight[group]
                         ):
-                            print(
+                            logger.info(
                                 f"[RedisStreamBus] Skipping reclaim of {msg_id}: still in-flight"
                             )
                             continue
-                        print(
+                        logger.info(
                             f"consumer group {group} reclaiming message id {msg_id} meant for topic {topic}"
                         )
 
@@ -324,7 +463,7 @@ class RedisStreamEventBus:
                         if not claimed:
                             continue
 
-                        print(
+                        logger.info(
                             f"[RedisStreamBus] reclaimed {msg_id} (idle={idle}ms) for group {group}"
                         )
                         await self._emit_monitor(
@@ -347,8 +486,8 @@ class RedisStreamEventBus:
                             except Exception:
                                 payload = {"raw": raw}
 
-                            retry_count = await self._redis.hincrby(retry_key, _id, 1)
-                            await self._redis.expire(retry_key, 3600)
+                            retry_count = await self._redis.hincrby(retry_key, _id, 1)  # type: ignore[misc]
+                            await self._redis.expire(retry_key, 3600)  # type: ignore[misc]
                             retry_count = int(retry_count)
 
                             if retry_count > dlq_retry_limit:
@@ -365,8 +504,8 @@ class RedisStreamEventBus:
                                     error=f"Max retries ({1 + dlq_retry_limit}) exceeded",
                                     retry_count=retry_count,
                                 )
-                                await self._redis.xack(stream_name, group, _id)
-                                await self._redis.hdel(retry_key, _id)
+                                await self._redis.xack(stream_name, group, _id)  # type: ignore[misc]
+                                await self._redis.hdel(retry_key, _id)  # type: ignore[misc]
                                 await self._emit_monitor(
                                     {
                                         "topic": topic,
@@ -391,8 +530,8 @@ class RedisStreamEventBus:
                                         await loop.run_in_executor(
                                             None, callback, payload
                                         )
-                                    await self._redis.xack(stream_name, group, _id)
-                                    await self._redis.hdel(retry_key, _id)
+                                    await self._redis.xack(stream_name, group, _id)  # type: ignore[misc]
+                                    await self._redis.hdel(retry_key, _id)  # type: ignore[misc]
                                     await self._emit_monitor(
                                         {
                                             "topic": topic,
@@ -436,11 +575,32 @@ class RedisStreamEventBus:
         group: str,
         stream_name: str,
         msg_id: str,
-        payload: dict,
+        payload: Dict[str, Any],
         error: str,
         retry_count: int,
-    ):
-        """Send message to per-group DLQ."""
+    ) -> None:
+        """
+        Send a failed message to the dead-letter queue.
+
+        This method publishes a message to the per-group DLQ stream with metadata
+        about the failure, including the original message, error, and retry count.
+
+        Args:
+            group: The consumer group name
+            stream_name: The original stream name
+            msg_id: The message ID that failed
+            payload: The original message payload
+            error: Error message describing the failure
+            retry_count: Number of retry attempts made
+
+        Note:
+            DLQ stream name format: `omni-dlq:{group}`
+            DLQ messages include original message, error details, and timestamps.
+        """
+        if not self._redis:
+            logger.error("[RedisStreamBus] Cannot send to DLQ: Redis not connected")
+            return
+
         dlq_stream = f"omni-dlq:{group}"
         dlq_payload = {
             "topic": stream_name.replace("omni-stream:", ""),
@@ -464,11 +624,29 @@ class RedisStreamEventBus:
                 f"[RedisStreamBus] FAILED to write to DLQ {dlq_stream}: {e}"
             )
 
-    async def _emit_monitor(self, metric: dict):
+    async def _emit_monitor(self, metric: Dict[str, Any]) -> None:
         """
-        Emit metric to a durable Redis Stream: omni-metrics.
-        This is the single source of truth for all events.
+        Emit a monitoring metric to the Redis metrics stream.
+
+        This method publishes metrics to the `omni-metrics` stream, which serves
+        as the single source of truth for all event bus events (processed, reclaimed,
+        DLQ pushes, etc.).
+
+        Args:
+            metric: Dictionary containing metric data:
+                - topic: The topic name
+                - event: Event type (e.g., "processed", "reclaim_attempt", "dlq_push")
+                - msg_id: The message ID
+                - group: The consumer group name
+                - consumer: The consumer name
+                - timestamp: Event timestamp
+
+        Note:
+            Metrics stream has a maximum length of 1,000,000 entries.
+            Failures to emit metrics are logged but don't raise exceptions.
         """
+        if not self._redis:
+            return  # Silently fail if not connected
         try:
             await self._redis.xadd(
                 "omni-metrics",
@@ -485,14 +663,29 @@ class RedisStreamEventBus:
         agent_name: str,
         delete_group: bool = False,
         delete_dlq: bool = False,
-    ):
+    ) -> None:
         """
         Unsubscribe an agent from a topic by stopping its consumer group.
-        If delete_group is True, the consumer group is deleted permanently.
-        If delete_dlq is True, the associated DLQ is also deleted.
+
+        This method stops message consumption for the specified agent by cancelling
+        all consume and reclaim tasks. Optionally, it can permanently delete the
+        consumer group and dead-letter queue.
+
+        Args:
+            topic: The topic name to unsubscribe from
+            agent_name: The agent/consumer identifier
+            delete_group: If True, permanently delete the consumer group from Redis
+            delete_dlq: If True, permanently delete the associated dead-letter queue
+
+        Note:
+            - If delete_group is False, the group remains and can be resumed
+            - If delete_dlq is False, failed messages remain in the DLQ for inspection
+            - This method is idempotent - safe to call multiple times
         """
         if not self._redis:
             await self.connect()
+        assert self._redis is not None  # Type narrowing after connect
+
         group_name = f"group:{topic}:{agent_name}"
 
         stream_name = f"omni-stream:{topic}"
@@ -528,15 +721,29 @@ class RedisStreamEventBus:
         else:
             logger.info(f"[RedisStreamBus] DLQ preserved at {dlq_name}")
 
-    async def get_consumers(self) -> Dict[str, Any]:
+    async def get_consumers(self) -> Dict[str, Dict[str, Any]]:
         """
         Return current consumers and their configurations.
 
-        This queries Redis directly for actual consumer groups,
-        so it works even from new instances (like CLI).
+        This method queries Redis directly for actual consumer groups, making it
+        work even from new instances (like CLI tools) that don't have the in-memory
+        _consumers dictionary populated.
+
+        Returns:
+            Dictionary mapping consumer group names to their metadata:
+                - topic: The subscribed topic
+                - stream: The Redis stream name
+                - consumers_count: Number of active consumers in the group
+                - pending_messages: Number of unprocessed messages
+                - source: Either "memory" (from _consumers) or "redis_query"
+
+        Note:
+            If _consumers is populated, it returns that data. Otherwise, it discovers
+            consumer groups by scanning Redis streams matching "omni-stream:*".
         """
         if not self._redis:
             await self.connect()
+        assert self._redis is not None  # Type narrowing after connect
 
         if self._consumers:
             return self._consumers

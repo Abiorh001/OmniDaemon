@@ -18,23 +18,45 @@ from omnidaemon.storage.base import BaseStore
 
 class RedisStore(BaseStore):
     """
-    Redis-based storage implementation.
+    Redis-based storage implementation for production deployments.
 
-    Smart features:
-    - Automatic TTL for results (native Redis expiration)
-    - Hash-based storage for agents (efficient updates)
-    - Sorted sets for metrics (time-ordered, easy to query)
-    - Atomic operations (thread-safe by design)
-    - Persistence (Redis RDB/AOF)
+    This implementation uses Redis to provide high-performance, distributed storage
+    with advanced features for production use.
+
+    Features:
+        - Automatic TTL: Native Redis expiration for results
+        - Hash-based storage: Efficient agent data storage and updates
+        - Sorted sets: Time-ordered metrics for easy querying
+        - Atomic operations: Thread-safe by design (Redis is single-threaded)
+        - Persistence: Supports Redis RDB and AOF persistence
+        - Distributed: Multiple instances can share the same Redis backend
+        - Streams: Uses Redis Streams for efficient metric storage
+
+    Best for:
+        - Production deployments
+        - Multi-instance deployments
+        - High-throughput scenarios
+        - Distributed systems
+
+    Args:
+        redis_url: Redis connection URL (e.g., "redis://localhost:6379")
+        key_prefix: Prefix for all Redis keys to avoid collisions (default: "omni")
+
+    Attributes:
+        redis_url: Redis connection URL
+        key_prefix: Prefix for all Redis keys
+        _redis: Redis client instance
+        _connected: Whether storage is connected
     """
 
-    def __init__(self, redis_url: str, key_prefix: str = "omni"):
+    def __init__(self, redis_url: str, key_prefix: str = "omni") -> None:
         """
-        Initialize Redis storage.
+        Initialize Redis storage backend.
 
         Args:
-            redis_url: Redis connection URL (e.g., redis://localhost:6379)
-            key_prefix: Prefix for all Redis keys (default: "omni")
+            redis_url: Redis connection URL (e.g., "redis://localhost:6379")
+            key_prefix: Prefix for all Redis keys to avoid namespace collisions
+                       (default: "omni")
         """
         self.redis_url = redis_url
         self.key_prefix = key_prefix
@@ -42,11 +64,30 @@ class RedisStore(BaseStore):
         self._connected = False
 
     def _key(self, *parts: str) -> str:
-        """Build a namespaced Redis key."""
+        """
+        Build a namespaced Redis key from parts.
+
+        Args:
+            *parts: Variable number of string parts to join
+
+        Returns:
+            Redis key string in format "{key_prefix}:{part1}:{part2}:..."
+
+        Example:
+            _key("agent", "topic", "name") -> "omni:agent:topic:name"
+        """
         return f"{self.key_prefix}:{':'.join(parts)}"
 
     async def connect(self) -> None:
-        """Connect to Redis."""
+        """
+        Establish connection to Redis.
+
+        This method creates an async Redis client connection. It is idempotent
+        and will reuse an existing connection if available.
+
+        Raises:
+            ConnectionError: If Redis connection fails
+        """
         if self._connected and self._redis:
             return
 
@@ -56,23 +97,47 @@ class RedisStore(BaseStore):
         self._connected = True
 
     async def close(self) -> None:
-        """Close Redis connection."""
+        """
+        Close Redis connection and cleanup resources.
+
+        This method gracefully closes the Redis client connection and marks
+        the storage as disconnected. It is idempotent.
+        """
         if self._redis:
             await self._redis.close()
             self._redis = None
             self._connected = False
 
     async def health_check(self) -> Dict[str, Any]:
-        """Check Redis health."""
+        """
+        Check Redis health and connection status.
+
+        This method performs a PING operation to verify Redis connectivity and
+        retrieves server information.
+
+        Returns:
+            Dictionary containing:
+                - status: "healthy" or "unhealthy"
+                - backend: "redis"
+                - redis_url: Redis connection URL
+                - connected: Whether storage is connected
+                - latency_ms: Round-trip latency in milliseconds
+                - redis_version: Redis server version
+                - used_memory: Memory usage (human-readable)
+                - connected_clients: Number of connected clients
+                - error: Error message if unhealthy
+        """
         if not self._redis:
             await self.connect()
 
+        assert self._redis is not None
+
         try:
             start = time.time()
-            await self._redis.ping()
+            await self._redis.ping()  # type: ignore[misc]
             latency = (time.time() - start) * 1000  # ms
 
-            info = await self._redis.info()
+            info = await self._redis.info()  # type: ignore[misc]
 
             return {
                 "status": "healthy",
@@ -93,10 +158,21 @@ class RedisStore(BaseStore):
 
     async def add_agent(self, topic: str, agent_data: Dict[str, Any]) -> None:
         """
-        Add or update an agent.remove old, add new
+        Add or update an agent for a topic (upsert behavior).
+
+        This method stores agent data in a Redis hash and maintains topic indexes
+        using Redis sets. It uses a pipeline for atomic operations.
+
+        Args:
+            topic: The topic name the agent subscribes to
+            agent_data: Dictionary containing agent metadata (must include 'name')
+
+        Raises:
+            ValueError: If agent_data is missing the 'name' field
         """
         if not self._redis:
             await self.connect()
+        assert self._redis is not None
 
         agent_name = agent_data.get("name")
         if not agent_name:
@@ -115,18 +191,28 @@ class RedisStore(BaseStore):
         }
 
         async with self._redis.pipeline(transaction=True) as pipe:
-            await pipe.hset(agent_key, mapping=agent_flat)
-            await pipe.sadd(self._key("agents", "topic", topic), agent_name)
-            await pipe.sadd(self._key("topics"), topic)
+            await pipe.hset(agent_key, mapping=agent_flat)  # type: ignore[misc]
+            await pipe.sadd(self._key("agents", "topic", topic), agent_name)  # type: ignore[misc]
+            await pipe.sadd(self._key("topics"), topic)  # type: ignore[misc]
             await pipe.execute()
 
     async def get_agent(self, topic: str, agent_name: str) -> Optional[Dict[str, Any]]:
-        """Get a specific agent."""
+        """
+        Get a specific agent by topic and name.
+
+        Args:
+            topic: The topic name
+            agent_name: The agent name/identifier
+
+        Returns:
+            Agent data dictionary with deserialized JSON fields, or None if not found
+        """
         if not self._redis:
             await self.connect()
+        assert self._redis is not None
 
         agent_key = self._key("agent", topic, agent_name)
-        data = await self._redis.hgetall(agent_key)
+        data = await self._redis.hgetall(agent_key)  # type: ignore[misc]
 
         if not data:
             return None
@@ -141,11 +227,20 @@ class RedisStore(BaseStore):
         }
 
     async def get_agents_by_topic(self, topic: str) -> List[Dict[str, Any]]:
-        """Get all agents for a topic."""
+        """
+        Get all agents subscribed to a topic.
+
+        Args:
+            topic: The topic name
+
+        Returns:
+            List of agent data dictionaries for the topic
+        """
         if not self._redis:
             await self.connect()
+        assert self._redis is not None  # Type narrowing after connect
 
-        agent_names = await self._redis.smembers(self._key("agents", "topic", topic))
+        agent_names = await self._redis.smembers(self._key("agents", "topic", topic))  # type: ignore[misc]
 
         if not agent_names:
             return []
@@ -159,11 +254,17 @@ class RedisStore(BaseStore):
         return agents
 
     async def list_all_agents(self) -> Dict[str, List[Dict[str, Any]]]:
-        """Get all agents grouped by topic."""
+        """
+        Get all registered agents grouped by topic.
+
+        Returns:
+            Dictionary mapping topic names to lists of agent data dictionaries
+        """
         if not self._redis:
             await self.connect()
+        assert self._redis is not None  # Type narrowing after connect
 
-        topics = await self._redis.smembers(self._key("topics"))
+        topics = await self._redis.smembers(self._key("topics"))  # type: ignore[misc]
 
         if not topics:
             return {}
@@ -180,18 +281,19 @@ class RedisStore(BaseStore):
         """Delete a specific agent."""
         if not self._redis:
             await self.connect()
+        assert self._redis is not None  # Type narrowing after connect
 
         agent_key = self._key("agent", topic, agent_name)
 
         async with self._redis.pipeline(transaction=True) as pipe:
-            await pipe.delete(agent_key)
-            await pipe.srem(self._key("agents", "topic", topic), agent_name)
+            await pipe.delete(agent_key)  # type: ignore[misc]
+            await pipe.srem(self._key("agents", "topic", topic), agent_name)  # type: ignore[misc]
             results = await pipe.execute()
 
-        count = await self._redis.scard(self._key("agents", "topic", topic))
+        count = await self._redis.scard(self._key("agents", "topic", topic))  # type: ignore[misc]
         if count == 0:
-            await self._redis.srem(self._key("topics"), topic)
-            await self._redis.delete(self._key("agents", "topic", topic))
+            await self._redis.srem(self._key("topics"), topic)  # type: ignore[misc]
+            await self._redis.delete(self._key("agents", "topic", topic))  # type: ignore[misc]
 
         return results[0] > 0
 
@@ -199,8 +301,9 @@ class RedisStore(BaseStore):
         """Delete all agents for a topic."""
         if not self._redis:
             await self.connect()
+        assert self._redis is not None  # Type narrowing after connect
 
-        agent_names = await self._redis.smembers(self._key("agents", "topic", topic))
+        agent_names = await self._redis.smembers(self._key("agents", "topic", topic))  # type: ignore[misc]
 
         if not agent_names:
             return 0
@@ -209,11 +312,11 @@ class RedisStore(BaseStore):
 
         async with self._redis.pipeline(transaction=True) as pipe:
             for key in agent_keys:
-                await pipe.delete(key)
+                await pipe.delete(key)  # type: ignore[misc]
 
-            await pipe.delete(self._key("agents", "topic", topic))
+            await pipe.delete(self._key("agents", "topic", topic))  # type: ignore[misc]
 
-            await pipe.srem(self._key("topics"), topic)
+            await pipe.srem(self._key("topics"), topic)  # type: ignore[misc]
 
             await pipe.execute()
 
@@ -223,11 +326,21 @@ class RedisStore(BaseStore):
         self, task_id: str, result: Dict[str, Any], ttl_seconds: Optional[int] = None
     ) -> None:
         """
-        Save task result with optional TTL.
+        Save task result with optional time-to-live.
 
+        This method stores the result in Redis with native TTL support. Results
+        are automatically expired by Redis when TTL is reached. A sorted set
+        index is maintained for efficient listing.
+
+        Args:
+            task_id: Unique task identifier
+            result: Dictionary containing task result data
+            ttl_seconds: Optional time-to-live in seconds. If specified, Redis
+                       will automatically delete the result after this duration.
         """
         if not self._redis:
             await self.connect()
+        assert self._redis is not None  # Type narrowing after connect
 
         result_key = self._key("result", task_id)
         result_data = {
@@ -246,9 +359,21 @@ class RedisStore(BaseStore):
         await self._redis.zadd(self._key("results", "index"), {task_id: time.time()})
 
     async def get_result(self, task_id: str) -> Optional[Dict[str, Any]]:
-        """Get task result (Redis handles TTL automatically)."""
+        """
+        Get task result (Redis handles TTL automatically).
+
+        This method retrieves a result from Redis. If the result has expired
+        (TTL reached), Redis will return None automatically.
+
+        Args:
+            task_id: The task ID to retrieve
+
+        Returns:
+            The result data dictionary, or None if not found or expired
+        """
         if not self._redis:
             await self.connect()
+        assert self._redis is not None  # Type narrowing after connect
 
         result_key = self._key("result", task_id)
         data = await self._redis.get(result_key)
@@ -264,6 +389,7 @@ class RedisStore(BaseStore):
         """Delete a task result."""
         if not self._redis:
             await self.connect()
+        assert self._redis is not None  # Type narrowing after connect
 
         result_key = self._key("result", task_id)
 
@@ -278,6 +404,7 @@ class RedisStore(BaseStore):
         """List recent results."""
         if not self._redis:
             await self.connect()
+        assert self._redis is not None  # Type narrowing after connect
 
         task_ids = await self._redis.zrevrange(
             self._key("results", "index"), 0, limit - 1
@@ -299,10 +426,20 @@ class RedisStore(BaseStore):
         """
         Save metric to Redis Stream.
 
-        Uses Redis Streams for metrics - perfect for time-series data!
+        This method uses Redis Streams to store metrics, which is ideal for
+        time-series data. The stream automatically maintains order and supports
+        efficient range queries.
+
+        Args:
+            metric_data: Dictionary containing metric information
+
+        Note:
+            - Stream is capped at 100,000 entries (oldest are removed)
+            - Metrics are automatically timestamped
         """
         if not self._redis:
             await self.connect()
+        assert self._redis is not None  # Type narrowing after connect
 
         metric_data["saved_at"] = time.time()
 
@@ -316,9 +453,23 @@ class RedisStore(BaseStore):
     async def get_metrics(
         self, topic: Optional[str] = None, limit: int = 1000
     ) -> List[Dict[str, Any]]:
-        """Get recent metrics from Redis Stream."""
+        """
+        Get recent metrics from Redis Stream.
+
+        This method retrieves metrics from the Redis Stream, optionally filtered
+        by topic. Metrics are returned in reverse chronological order (most recent first).
+
+        Args:
+            topic: Optional topic name to filter metrics
+            limit: Maximum number of metrics to return (default: 1000)
+
+        Returns:
+            List of metric dictionaries with stream_id added, most recent first.
+            If topic is specified, only metrics for that topic are returned.
+        """
         if not self._redis:
             await self.connect()
+        assert self._redis is not None  # Type narrowing after connect
 
         entries = await self._redis.xrevrange(
             self._key("metrics", "stream"), count=limit
@@ -340,17 +491,34 @@ class RedisStore(BaseStore):
         return metrics
 
     async def save_config(self, key: str, value: Any) -> None:
-        """Save configuration value."""
+        """
+        Save a configuration value.
+
+        Args:
+            key: Configuration key
+            value: Configuration value (will be JSON-serialized)
+        """
         if not self._redis:
             await self.connect()
+        assert self._redis is not None  # Type narrowing after connect
 
         config_key = self._key("config", key)
         await self._redis.set(config_key, json.dumps(value, default=str))
 
     async def get_config(self, key: str, default: Any = None) -> Any:
-        """Get configuration value."""
+        """
+        Get a configuration value.
+
+        Args:
+            key: Configuration key to retrieve
+            default: Default value if key is not found
+
+        Returns:
+            The configuration value (deserialized from JSON) or the default value
+        """
         if not self._redis:
             await self.connect()
+        assert self._redis is not None  # Type narrowing after connect
 
         config_key = self._key("config", key)
         data = await self._redis.get(config_key)
@@ -367,6 +535,7 @@ class RedisStore(BaseStore):
         """Clear all agents."""
         if not self._redis:
             await self.connect()
+        assert self._redis is not None  # Type narrowing after connect
 
         pattern = self._key("agent", "*")
         count = 0
@@ -387,6 +556,7 @@ class RedisStore(BaseStore):
         """Clear all results."""
         if not self._redis:
             await self.connect()
+        assert self._redis is not None  # Type narrowing after connect
 
         pattern = self._key("result", "*")
         count = 0
@@ -403,6 +573,7 @@ class RedisStore(BaseStore):
         """Clear all metrics."""
         if not self._redis:
             await self.connect()
+        assert self._redis is not None  # Type narrowing after connect
 
         count = await self._redis.xlen(self._key("metrics", "stream"))
         await self._redis.delete(self._key("metrics", "stream"))
@@ -410,13 +581,22 @@ class RedisStore(BaseStore):
         return count
 
     async def clear_all(self) -> Dict[str, int]:
-        """Clear all OmniDaemon data."""
+        """
+        Clear all OmniDaemon data from Redis.
+
+        This method removes all agents, results, metrics, and configuration
+        from Redis. Use with caution!
+
+        Returns:
+            Dictionary with counts of deleted items by category
+        """
         agents_count = await self.clear_agents()
         results_count = await self.clear_results()
         metrics_count = await self.clear_metrics()
 
         if not self._redis:
             await self.connect()
+        assert self._redis is not None
 
         pattern = self._key("config", "*")
         config_count = 0

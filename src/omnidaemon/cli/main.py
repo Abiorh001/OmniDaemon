@@ -1,8 +1,8 @@
 import asyncio
-import httpx
 import json
 import typer
 from decouple import config
+from typing import Optional, Dict, Any
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
@@ -11,13 +11,8 @@ from rich.progress import (
     Progress,
     SpinnerColumn,
     TextColumn,
-    BarColumn,
-    TaskProgressColumn,
 )
 from rich.tree import Tree
-from rich.layout import Layout
-from rich.live import Live
-from rich.markdown import Markdown
 from rich.syntax import Syntax
 from rich.columns import Columns
 from rich.align import Align
@@ -25,7 +20,6 @@ from rich.text import Text
 from omnidaemon.schemas import EventEnvelope, PayloadBase
 from pathlib import Path
 from omnidaemon.sdk import OmniDaemonSDK
-import sys
 from datetime import datetime
 
 
@@ -490,13 +484,13 @@ def bus_stats_cmd(
 
 
 def load_event(
-    payload_file: str = None,
-    topic: str = None,
-    content: str = None,
-    reply_to: str = None,
-    webhook: str = None,
-    **kwargs,
-):
+    payload_file: Optional[str] = None,
+    topic: Optional[str] = None,
+    content: Optional[str] = None,
+    reply_to: Optional[str] = None,
+    webhook: Optional[str] = None,
+    **kwargs: Any,
+) -> Dict[str, Any]:
     """
     Create an EventEnvelope either from file (full EventEnvelope) or minimal fields.
     kwargs can include tenant_id, correlation_id, causation_id, source, meta.
@@ -506,16 +500,15 @@ def load_event(
             raw = Path(payload_file).read_text()
             data = json.loads(raw)
         except FileNotFoundError:
-            console.print(f"[red]File not found: {payload_file}[/]", err=True)
+            console.print(f"[red]File not found: {payload_file}[/]")
             raise typer.Exit(1)
         except json.JSONDecodeError:
-            console.print(f"[red]Invalid JSON in {payload_file}[/]", err=True)
+            console.print(f"[red]Invalid JSON in {payload_file}[/]")
             raise typer.Exit(1)
     else:
         if not topic or not content:
             console.print(
-                "[red]You must provide either a payload file or topic + content[/]",
-                err=True,
+                "[red]You must provide either a payload file or topic + content[/]"
             )
             raise typer.Exit(1)
 
@@ -526,7 +519,7 @@ def load_event(
     try:
         envelope = EventEnvelope(**data)
     except Exception as e:
-        console.print(f"[red]Invalid EventEnvelope: {e}[/]", err=True)
+        console.print(f"[red]Invalid EventEnvelope: {e}[/]")
         raise typer.Exit(1)
 
     return envelope.model_dump()
@@ -602,7 +595,7 @@ def publish_task(
     console.print(
         f"  [cyan]• Check status:[/] omnidaemon task result --task-id {task_id}"
     )
-    console.print(f"  [cyan]• View all tasks:[/] omnidaemon task list")
+    console.print("  [cyan]• View all tasks:[/] omnidaemon task list")
     console.print()
 
 
@@ -1213,7 +1206,7 @@ def agent_delete_topic(
     try:
         count = asyncio.run(sdk.delete_topic(topic=topic))
     except Exception as e:
-        console.print(f"[red]Failed to delete topic: {e}[/]", err=True)
+        console.print(f"[red]Failed to delete topic: {e}[/]")
         raise typer.Exit(1)
 
     console.print(f"[green]✓ Deleted {count} agent(s) from topic '{topic}'.[/]")
@@ -1345,7 +1338,7 @@ def storage_clear_agents(
     try:
         count = asyncio.run(sdk.clear_agents())
     except Exception as e:
-        console.print(f"[red]Failed to clear agents: {e}[/]", err=True)
+        console.print(f"[red]Failed to clear agents: {e}[/]")
         raise typer.Exit(1)
 
     console.print(f"[green]✓ Cleared {count} agent(s).[/]")
@@ -1367,7 +1360,7 @@ def storage_clear_results(
     try:
         count = asyncio.run(sdk.clear_results())
     except Exception as e:
-        console.print(f"[red]Failed to clear results: {e}[/]", err=True)
+        console.print(f"[red]Failed to clear results: {e}[/]")
         raise typer.Exit(1)
 
     console.print(f"[green]✓ Cleared {count} result(s).[/]")
@@ -1389,7 +1382,7 @@ def storage_clear_metrics(
     try:
         count = asyncio.run(sdk.clear_metrics())
     except Exception as e:
-        console.print(f"[red]Failed to clear metrics: {e}[/]", err=True)
+        console.print(f"[red]Failed to clear metrics: {e}[/]")
         raise typer.Exit(1)
 
     console.print(f"[green]✓ Cleared {count} metric(s).[/]")
@@ -1489,7 +1482,7 @@ def config_set(
     try:
         asyncio.run(sdk.save_config(key, parsed_value))
     except Exception as e:
-        console.print(f"[red]Failed to save config: {e}[/]", err=True)
+        console.print(f"[red]Failed to save config: {e}[/]")
         raise typer.Exit(1)
 
     console.print(f"[green]✓ Configuration '{key}' saved.[/]")
@@ -1504,7 +1497,7 @@ def config_get(
     try:
         value = asyncio.run(sdk.get_config(key, default=default))
     except Exception as e:
-        console.print(f"[red]Failed to get config: {e}[/]", err=True)
+        console.print(f"[red]Failed to get config: {e}[/]")
         raise typer.Exit(1)
 
     console.print(
@@ -1542,8 +1535,6 @@ def health():
 
     status = data.get("status", "unknown")
     event_bus_connected = data.get("event_bus_connected", False)
-    storage_healthy = data.get("storage_healthy", False)
-    has_active_consumers = data.get("has_active_consumers", False)
     registered_agents_count = data.get("registered_agents_count", 0)
     active_consumers = data.get("active_consumers", {})
 

@@ -1,11 +1,16 @@
 from fastapi import FastAPI, status
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Dict, Any, Optional
 import logging
 from contextlib import asynccontextmanager
 
-from omnidaemon import OmniDaemonSDK, AgentConfig, SubscriptionConfig, EventEnvelope, PayloadBase
+from omnidaemon import (
+    OmniDaemonSDK,
+    AgentConfig,
+    SubscriptionConfig,
+    EventEnvelope,
+    PayloadBase,
+)
 from omnicoreagent import OmniAgent, MemoryRouter, EventRouter
 
 logger = logging.getLogger(__name__)

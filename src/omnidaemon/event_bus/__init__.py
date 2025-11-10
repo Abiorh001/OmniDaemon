@@ -17,14 +17,14 @@ Usage:
     await event_bus.publish({"topic": "test", "payload": {...}})
 """
 
-from typing import Dict, Type
+from typing import Dict, Type, Any
 from decouple import config
 from omnidaemon.event_bus.base import BaseEventBus
 from omnidaemon.event_bus.redis_stream_bus import RedisStreamEventBus
 
 
 # Registry of available event bus backends
-EVENT_BUS_BACKENDS: Dict[str, Type[BaseEventBus]] = {
+EVENT_BUS_BACKENDS: Dict[str, Type[Any]] = {
     "redis_stream": RedisStreamEventBus,
 }
 

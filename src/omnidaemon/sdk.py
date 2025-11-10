@@ -1,4 +1,4 @@
-from typing import Dict, Any, Callable, List, Optional
+from typing import Dict, Any, List, Optional
 import logging
 import uuid
 import time
@@ -16,32 +16,63 @@ logger = logging.getLogger(__name__)
 
 class OmniDaemonSDK:
     """
-    App-facing SDK for OmniDaemon with Dependency Injection.
+    Application-facing SDK for OmniDaemon with dependency injection.
 
-    Allows publishing tasks and registering agent callbacks.
+    This is the main interface for interacting with OmniDaemon. It provides
+    methods for publishing tasks, registering agents, and managing the system.
     All data operations (agents, results, metrics) go through unified storage.
 
-    Dependencies are injected via constructor:
-    - event_bus: Messaging layer (from module-level instance)
-    - store: Storage layer (from module-level instance)
+    The SDK uses dependency injection for the event bus and storage, allowing
+    you to use different implementations (Redis, JSON, etc.) without changing
+    your code.
+
+    Args:
+        event_bus: Optional event bus instance. If not provided, uses the
+                  module-level default instance.
+        store: Optional storage instance. If not provided, uses the module-level
+              default instance.
+
+    Attributes:
+        event_bus: Event bus instance for publishing and subscribing
+        store: Storage instance for data persistence
+        runner: BaseAgentRunner instance that orchestrates agent execution
+        _agents: Internal list of registered agents
+        _start_time: Timestamp when SDK was started
+        _is_running: Whether the SDK is currently running
     """
 
     def __init__(
         self,
         event_bus: Optional[BaseEventBus] = None,
         store: Optional[BaseStore] = None,
-    ):
+    ) -> None:
         self.event_bus = event_bus or default_event_bus
         self.store = store or default_store
         self.runner = BaseAgentRunner(
             event_bus=self.event_bus,
             store=self.store,
         )
-        self._agents: List[Dict] = []
-        self._start_time = None
+        self._agents: List[Dict[str, Any]] = []
+        self._start_time: Optional[float] = None
         self._is_running = False
 
     async def publish_task(self, event_envelope: EventEnvelope) -> str:
+        """
+        Publish a task/event to the event bus.
+
+        This method validates and publishes an event envelope to the specified
+        topic. The event will be processed by any agents subscribed to that topic.
+
+        Args:
+            event_envelope: EventEnvelope instance containing topic, payload, and metadata
+
+        Returns:
+            The task ID of the published event
+
+        Raises:
+            ValidationError: If event_envelope validation fails
+            Exception: If publishing fails
+        """
         try:
             topic = event_envelope.topic
             payload = event_envelope.payload
@@ -80,12 +111,22 @@ class OmniDaemonSDK:
             logger.error(f"Error parsing EventEnvelope: {e}")
             raise
 
-    async def register_agent(self, agent_config: AgentConfig):
+    async def register_agent(self, agent_config: AgentConfig) -> None:
         """
         Register an agent to a topic with a callback and metadata.
 
-        All agent data is persisted to unified storage via DI.
-        Metrics are tracked automatically in storage when agent runs.
+        This method registers an agent that will process messages from the specified
+        topic. The agent callback function is where your AI agent or business logic
+        runs. All agent data is persisted to unified storage, and metrics are
+        automatically tracked when the agent processes messages.
+
+        Args:
+            agent_config: AgentConfig instance containing agent name, topic, callback,
+                        tools, description, and subscription configuration
+
+        Raises:
+            ValidationError: If agent_config validation fails
+            Exception: If registration fails
         """
         try:
             name = agent_config.name
@@ -94,7 +135,12 @@ class OmniDaemonSDK:
             tools = agent_config.tools
             description = agent_config.description
             config = agent_config.config
-            sub_config = {k: v for k, v in config.model_dump().items() if v is not None}
+            if config:
+                sub_config = {
+                    k: v for k, v in config.model_dump().items() if v is not None
+                }
+            else:
+                sub_config = {}
             logger.info(
                 f"Registering agent '{name}' on topic '{topic}', config={sub_config}"
             )
@@ -117,10 +163,15 @@ class OmniDaemonSDK:
             logger.error(f"Error registering agent '{agent_config.name}': {e}")
             raise
 
-    async def list_agents(self):
+    async def list_agents(self) -> Dict[str, List[Dict[str, Any]]]:
         """
-        Return all agents with metadata and status, grouped by topic.
-        Uses injected storage (DI).
+        List all registered agents with metadata, grouped by topic.
+
+        This method retrieves all agents from storage and returns them grouped
+        by topic with their metadata (name, tools, description, callback, config).
+
+        Returns:
+            Dictionary mapping topic names to lists of agent metadata dictionaries
         """
         all_agents = await self.store.list_all_agents()
 
@@ -139,9 +190,16 @@ class OmniDaemonSDK:
 
         return result
 
-    async def get_agent(self, topic: str, agent_name: str):
+    async def get_agent(self, topic: str, agent_name: str) -> Optional[Dict[str, Any]]:
         """
-        Return full agent info by topic and name.
+        Get full agent information by topic and name.
+
+        Args:
+            topic: The topic name
+            agent_name: The agent name/identifier
+
+        Returns:
+            Agent data dictionary with all metadata, or None if not found
         """
         agent = await self.store.get_agent(topic, agent_name)
         if agent:
@@ -231,11 +289,34 @@ class OmniDaemonSDK:
         """
         return await self.store.delete_topic(topic)
 
-    async def health(self):
+    async def health(self) -> Dict[str, Any]:
         """
-        Return health info about the runner and infrastructure.
+        Get comprehensive health information about the runner and infrastructure.
 
+        This method checks the status of all components including:
+        - Runner status (running, stopped, ready, degraded, down)
+        - Event bus connection status
+        - Storage health
+        - Active consumers
+        - Registered agents
+        - Uptime
 
+        Returns:
+            Dictionary containing:
+                - runner_id: Unique runner identifier
+                - status: Overall status (running, stopped, ready, degraded, down)
+                - is_running: Whether SDK is running
+                - runner_running: Whether runner is active
+                - has_active_consumers: Whether there are active message consumers
+                - event_bus_connected: Whether event bus is connected
+                - event_bus_type: Type of event bus (class name)
+                - storage_healthy: Whether storage is healthy
+                - storage_status: Detailed storage status
+                - subscribed_topics: List of topics with registered agents
+                - agents: Dictionary of agents grouped by topic
+                - registered_agents_count: Total number of registered agents
+                - active_consumers: Dictionary of active consumer groups
+                - uptime_seconds: Runner uptime in seconds
         """
         all_agents = await self.store.list_all_agents()
         agents_list = await self.list_agents()
@@ -346,16 +427,27 @@ class OmniDaemonSDK:
         """
         return await self.store.delete_result(task_id)
 
-    async def start(self):
-        """Start the agent runner and begin processing tasks."""
+    async def start(self) -> None:
+        """
+        Start the agent runner and begin processing tasks.
+
+        This method activates the runner to begin consuming and processing
+        messages from all registered topics. It is idempotent - calling it
+        multiple times is safe.
+        """
         if not self._is_running:
             self._start_time = time.time()
             self._is_running = True
             logger.info("Starting OmniDaemon SDK...")
         await self.runner.start()
 
-    async def stop(self):
-        """Stop the agent runner but keep connections alive."""
+    async def stop(self) -> None:
+        """
+        Stop the agent runner but keep connections alive.
+
+        This method stops message processing but maintains connections to
+        the event bus and storage. Use shutdown() for complete cleanup.
+        """
         logger.info("Stopping OmniDaemon SDK...")
         await self.runner.stop()
         self._is_running = False
@@ -394,22 +486,35 @@ class OmniDaemonSDK:
         self._is_running = False
         logger.info("OmniDaemon SDK shutdown complete")
 
-    async def metrics(self, topic: Optional[str] = None, limit: int = 1000):
+    async def metrics(
+        self, topic: Optional[str] = None, limit: int = 1000
+    ) -> Dict[str, Dict[str, Dict[str, Any]]]:
         """
-        Return detailed task processing metrics from unified storage.
+        Get detailed task processing metrics from unified storage.
 
-        Metrics are automatically tracked by runner and saved to storage.
+        This method retrieves and aggregates metrics that are automatically
+        tracked by the runner when agents process messages. Metrics include
+        task counts (received, processed, failed) and processing times.
 
         Args:
-            topic: Optional topic filter
-            limit: Maximum number of metrics to retrieve
+            topic: Optional topic name to filter metrics. If None, returns
+                  metrics for all topics.
+            limit: Maximum number of raw metrics to retrieve for aggregation
+                  (default: 1000)
 
         Returns:
-            Dict with aggregated metrics by topic and agent
+            Dictionary with nested structure:
+                {topic: {agent_name: {
+                    tasks_received: int,
+                    tasks_processed: int,
+                    tasks_failed: int,
+                    total_processing_time: float,
+                    avg_processing_time_sec: float
+                }}}
         """
         raw_metrics = await self.store.get_metrics(topic=topic, limit=limit)
 
-        result = {}
+        result: Dict[str, Dict[str, Dict[str, Any]]] = {}
         for metric in raw_metrics:
             topic_name = metric.get("topic")
             agent_name = metric.get("agent")
@@ -593,7 +698,7 @@ class OmniDaemonSDK:
 
             try:
                 data = json.loads(data_str)
-            except:
+            except (json.JSONDecodeError, TypeError):
                 data = data_str
 
             messages.append({"id": msg_id_str, "data": data})
@@ -705,7 +810,7 @@ class OmniDaemonSDK:
         stream_keys = await self.event_bus._redis.keys("omni-stream:*")
         stream_keys = [k.decode() if isinstance(k, bytes) else k for k in stream_keys]
 
-        snapshot = {"timestamp": time.time(), "topics": {}}
+        snapshot: Dict[str, Any] = {"timestamp": time.time(), "topics": {}}
 
         for stream_key in stream_keys:
             topic = stream_key.replace("omni-stream:", "", 1)
@@ -734,7 +839,7 @@ class OmniDaemonSDK:
                     try:
                         dlq_len = await self.event_bus._redis.xlen(dlq_key)
                         dlq_total += dlq_len
-                    except:
+                    except Exception:
                         dlq_len = 0
 
                     groups.append(
@@ -756,10 +861,12 @@ class OmniDaemonSDK:
             }
 
         redis_info = {"used_memory_human": "-"}
-        try:
-            info = await self.event_bus._redis.info()
-            redis_info["used_memory_human"] = info.get("used_memory_human", "-")
-        except:
-            pass
+        redis_client = getattr(self.event_bus, "_redis", None)
+        if redis_client:
+            try:
+                info = await redis_client.info()
+                redis_info["used_memory_human"] = info.get("used_memory_human", "-")
+            except Exception:
+                pass
 
         return {"snapshot": snapshot, "redis_info": redis_info}

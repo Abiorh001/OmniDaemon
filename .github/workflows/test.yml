@@ -1,0 +1,226 @@
+name: Test Suite
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+  push:
+    branches:
+      - main
+      - develop
+
+jobs:
+  check-test-files:
+    name: Check for Test Files
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch full history for diff checking
+
+      - name: Check for test files in PR
+        if: github.event_name == 'pull_request'
+        run: |
+          # Get list of changed files in the PR
+          CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD)
+          
+          # Check if any test files are added/modified
+          TEST_FILES=$(echo "$CHANGED_FILES" | grep -E "(test_.*\.py|.*_test\.py)" || true)
+          
+          # Check if source files are changed
+          SOURCE_FILES=$(echo "$CHANGED_FILES" | grep -E "^src/" || true)
+          
+          if [ -n "$SOURCE_FILES" ] && [ -z "$TEST_FILES" ]; then
+            echo "❌ ERROR: Source code was modified but no test files were added or modified!"
+            echo ""
+            echo "Modified source files:"
+            echo "$SOURCE_FILES"
+            echo ""
+            echo "Please add or update test files to cover your changes."
+            echo "Test files should be in the 'tests/' directory and follow the pattern:"
+            echo "  - test_*.py"
+            echo "  - *_test.py"
+            exit 1
+          fi
+          
+          if [ -n "$TEST_FILES" ]; then
+            echo "✅ Test files found:"
+            echo "$TEST_FILES"
+          else
+            echo "ℹ️  No source code changes detected, skipping test file requirement."
+          fi
+
+  run-tests:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    needs: check-test-files
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Install dependencies
+        run: |
+          uv sync --group dev
+
+      - name: Run tests with coverage
+        run: |
+          uv run pytest --cov=src/omnidaemon --cov-report=term --cov-report=json --cov-report=xml -v
+
+      - name: Upload coverage to artifacts
+        uses: actions/upload-artifact@v4
+        if: matrix.python-version == '3.13'
+        with:
+          name: coverage-report
+          path: |
+            coverage.json
+            coverage.xml
+
+      - name: Check coverage threshold
+        if: matrix.python-version == '3.13'
+        run: |
+          python3 << 'EOF'
+          import json
+          import sys
+          
+          with open('coverage.json', 'r') as f:
+              data = json.load(f)
+          
+          coverage = data['totals']['percent_covered']
+          threshold = 70  # Minimum 70% coverage
+          
+          print(f"Current coverage: {coverage:.2f}%")
+          print(f"Minimum threshold: {threshold}%")
+          
+          if coverage < threshold:
+              print(f"❌ Coverage {coverage:.2f}% is below threshold of {threshold}%")
+              sys.exit(1)
+          else:
+              print(f"✅ Coverage {coverage:.2f}% meets threshold of {threshold}%")
+          EOF
+
+      - name: Update coverage badge in README
+        if: matrix.python-version == '3.13' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+        run: |
+          python3 << 'EOF'
+          import json
+          import re
+          from urllib.parse import quote
+          
+          # Read coverage data
+          with open('coverage.json', 'r') as f:
+              data = json.load(f)
+          
+          coverage = data['totals']['percent_covered']
+          
+          # Determine badge color based on coverage
+          if coverage >= 90:
+              color = "brightgreen"
+          elif coverage >= 80:
+              color = "green"
+          elif coverage >= 70:
+              color = "yellowgreen"
+          elif coverage >= 60:
+              color = "yellow"
+          elif coverage >= 50:
+              color = "orange"
+          else:
+              color = "red"
+          
+          # Read README
+          with open('README.md', 'r') as f:
+              readme = f.read()
+          
+          # Update coverage badge
+          coverage_str = f"{coverage:.2f}%"
+          # URL encode the coverage string for the badge (shields.io format)
+          coverage_encoded = quote(coverage_str, safe='')
+          badge_pattern = r'\[!\[Coverage\]\(https://img\.shields\.io/badge/coverage-[^)]+\)\]'
+          new_badge = f'[![Coverage](https://img.shields.io/badge/coverage-{coverage_encoded}-{color})](https://github.com/omnirexflora-labs/OmniDaemon)'
+          
+          updated_readme = re.sub(badge_pattern, new_badge, readme)
+          
+          # Write back
+          with open('README.md', 'w') as f:
+              f.write(updated_readme)
+          
+          print(f"✅ Updated coverage badge to {coverage_str} ({color})")
+          EOF
+
+      - name: Commit and push coverage badge update
+        if: matrix.python-version == '3.13' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add README.md
+          if ! git diff --staged --quiet; then
+            git commit -m "chore: update coverage badge [skip ci]"
+            git push
+          else
+            echo "No changes to commit"
+          fi
+
+  lint:
+    name: Lint Code
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: 'pip'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Install dependencies
+        run: |
+          uv sync --group dev
+
+      - name: Run ruff
+        run: |
+          uv run ruff check src/ tests/
+
+      - name: Run black check
+        run: |
+          uv run black --check src/ tests/
+
+      - name: Run mypy
+        run: |
+          uv run mypy src/
+

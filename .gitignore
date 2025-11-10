@@ -5,7 +5,7 @@ __pycache__/
 
 # C extensions
 *.so
-
+.omnidaemon_data/
 # Distribution / packaging
 .Python
 build/
@@ -205,3 +205,31 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Coverage
+.coverage
+
+# Coverage report
+coverage.xml
+coverage.json
+htmlcov/
+
+# MyPy
+.mypy_cache/
+dmypy.json
+py.typed
+pyrightconfig.json
+ruff.toml
+.ruff_cache/
+.pytype/
+.pyre/
+.dmypy.json
+dmypy.json
+.coverage.*
+.coverage
+.mypy_cache/
+.ruff_cache/
+.pytype/
+.pyre/
+.python-version
+

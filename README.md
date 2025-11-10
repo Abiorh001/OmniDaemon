@@ -7,6 +7,7 @@
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![Redis](https://img.shields.io/badge/redis-6.0+-red.svg)](https://redis.io/)
+[![Coverage](https://img.shields.io/badge/coverage-58.13%25-yellow)](https://github.com/omnirexflora-labs/OmniDaemon)
 
 **Run any AI agent. Any framework. One event-driven control plane.**
 
