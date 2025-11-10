@@ -1,13 +1,22 @@
 #!/bin/bash
+set -e  # Exit on error
 
-# Clean up any previous builds
+echo "🧹 Cleaning previous builds..."
 rm -rf dist/ build/ *.egg-info/
 
-# Build the package
+echo "📦 Building package..."
 uv run hatch build
 
-# Check the distribution
+echo "✅ Checking distribution..."
 uv run twine check dist/*
 
-echo "Build complete! To publish to PyPI, run:"
-echo "twine upload dist/*"
+echo ""
+echo "✨ Build complete! Distribution files:"
+ls -lh dist/
+
+echo ""
+echo "📤 To publish to PyPI, run:"
+echo "   uv run twine upload dist/*"
+echo ""
+echo "📤 To publish to TestPyPI first, run:"
+echo "   uv run twine upload --repository testpypi dist/*"

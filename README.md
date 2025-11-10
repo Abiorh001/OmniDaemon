@@ -1448,6 +1448,10 @@ sdk = OmniDaemonSDK()
 
 ## 🏗️ Architecture
 
+![OmniDaemon C4 Architecture](https://www.plantuml.com/plantuml/svg/bLLDR-Cs4BtxLx0v50uQHvUU2XHOVsInQP9TnNAswCcWf8b4c2Ar7DAxHj7_Neue4PQjo_faKdnlXZDl7Z-WvSQwHiv-4QgGhWHMMzlY7qbY-FVxIjZQvGx155fPKFQ-q4tIIgu8iq1RIf4dwzyNAMszlJmd3KSBnc_jrnx1XG9ptnB_B0M3MkqVVjWv4TwncmqSGUeM34kOtmQZk6JPoHCqD_xp6mAozVCZquOXg1APvNZ0czlPB1pQhxHJ9JUdkMwKA3aqMddS5x_OT8k1x9RzEsF-5rEQOtcuEBbvefZfoTPQqRyjL8AkWenNe2pUiTRbKc0DCOyBJkEKwkwruWXB0csxdJ5lvd8iZCY9HZCu-cCiTvxUmuTOLzIy5HxwQRTBsJ9zP1cOO-3zoD7w7VhxyAFL23q5etuPBTbHSBPzo7PNbE-yiDgS24Wvh1n-33lZTDS6kFMiCL6MdvWzjS3c1ag1oO6_7tYYkCN4y3mNjlbsUrqQG2SjUdgWqdQhZ5RiKLamFXSOXqsbgogUIs01obemIFrG1Lon5vAgGneWkH1yTo9L_SQsegXxAPc5Zo9KrIdgNPjOeL-Pxx_moVYFdlg_sMmMgKcjuPvxVtLAdVwpp1hW3HBp2o3o2jZAw4FVQfSdlidikx0rspo_tb4aT0qOLXdjMkhkE41NmZx0ikL53Uo9jgRvFucgNjZQKrLrwspV6UnIybUuOgVMzEIVbxkC_GKsv3zDlvRQbGiF4aTWJVTvYZNqUgXAjtXvdMPSlhocYvmZbCmdRGFRT96ZGcX5s2SuBRvowO1rSXaaFwYYyCMQogwj8bMgqLO6ijVdCDMIMw79Q3Ohsl2bS8LrFlp0IK1UmHMdLqcb8-qBhGB5HXUk0MK7Hj-_XYya85vJpdm2lVq5rMvfwhsfDboLI71IyEtPiU1KQoub3Wwq9_-Ptzxqbf1KstGzS7V7Xzcc-tvpWFPiVZkh-FhmURTVlMNxtJ_fGnykWgBUu_Xt8F7UpVsVuNFGsoKqAdaQsds-n0pwd8RGrql4I7iJcC67pceolbKwSdA2aaqEFXZ2HJkFm2lpjheL1Kx0H_ZGm6LmPIvbpej31tfKYzRe0l0guiWjCtw4GKans9c53k1pq7YQtZ3Mfz3gNLGazobOM_qyPZmMqx2BYlJF_z-GrreVs5otOIIZebdw9Tk5OC7SUIlY42J3Uvnqp_20wOzt9qCWGWIF7nv5jDowwzh7C6EdvoNsjkhNPEI3VyTtO5uA0uMzepTbePKyqSlt0LJf6la_)
+
+<sub>**C4 Model Architecture Diagram** - System context and container-level view of OmniDaemon's architecture</sub>
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                         OmniDaemon                              │

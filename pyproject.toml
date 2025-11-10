@@ -59,8 +59,11 @@ dependencies = [
 omnidaemon = "omnidaemon.cli.main:app"
 
 [project.urls]
+Homepage = "https://github.com/omnirexflora-labs/OmniDaemon"
 Repository = "https://github.com/omnirexflora-labs/OmniDaemon"
+Documentation = "https://github.com/omnirexflora-labs/OmniDaemon#readme"
 Issues = "https://github.com/omnirexflora-labs/OmniDaemon/issues"
+Changelog = "https://github.com/omnirexflora-labs/OmniDaemon/releases"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/omnidaemon"]
