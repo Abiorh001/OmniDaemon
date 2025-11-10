@@ -5,7 +5,7 @@
 ### **Universal Event-Driven Runtime Engine for AI Agents**
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Redis](https://img.shields.io/badge/redis-6.0+-red.svg)](https://redis.io/)
 [![Coverage](https://img.shields.io/badge/coverage-90.19%25-brightgreen)](https://github.com/omnirexflora-labs/OmniDaemon)
 
