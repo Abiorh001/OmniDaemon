@@ -54,7 +54,7 @@ app.add_typer(agent_app, name="agent")
 app.add_typer(task_app, name="task")
 app.add_typer(bus_app, name="bus")
 
-EVENT_BUS_TYPE = config("EVENT_BUS_TYPE")
+EVENT_BUS_TYPE = config("EVENT_BUS_TYPE", default="redis_stream")
 
 
 OMNIDAEMON_BANNER = """
