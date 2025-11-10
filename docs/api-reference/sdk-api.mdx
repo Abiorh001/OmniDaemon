@@ -958,10 +958,10 @@ async def process_file(message: dict):
     """Agent callback."""
     content = message.get("content", {})
     filename = content.get("filename")
-    
+
     # Process file
     result = f"Processed {filename}"
-    
+
     return {"status": "success", "result": result}
 
 async def main():
@@ -972,10 +972,10 @@ async def main():
             callback=process_file,
         )
     )
-    
+
     # Start runner
     await sdk.start()
-    
+
     # Publish event
     task_id = await sdk.publish_task(
         EventEnvelope(
@@ -985,20 +985,20 @@ async def main():
             ),
         )
     )
-    
+
     # Wait for result
     await asyncio.sleep(2)
     result = await sdk.get_result(task_id)
     print(f"Result: {result}")
-    
+
     # Get metrics
     metrics = await sdk.metrics()
     print(f"Metrics: {metrics}")
-    
+
     # Health check
     health = await sdk.health()
     print(f"Status: {health['status']}")
-    
+
     # Cleanup
     await sdk.shutdown()
 
@@ -1032,4 +1032,3 @@ asyncio.run(main())
 - **Config:** `save_config()`, `get_config()`
 
 All methods are async and should be awaited! 🚀
-

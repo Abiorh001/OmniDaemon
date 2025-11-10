@@ -550,7 +550,7 @@ Pluggable backends via abstract interfaces:
 class BaseEventBus(ABC):
     @abstractmethod
     async def publish(self, topic, payload): ...
-    
+
     @abstractmethod
     async def subscribe(self, topic, consumer_group, callback): ...
 
@@ -654,4 +654,3 @@ sdk.register_agent(topics=["user.signup"], callback=send_welcome_email)
 ---
 
 **Next:** [Enterprise Use Cases](../enterprise/use-cases.md) | [Deployment Guide](../enterprise/deployment.md)
-

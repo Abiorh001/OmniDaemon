@@ -143,14 +143,14 @@ TARGET_FOLDER_PATH = os.path.join(
 filesystem_agent = LlmAgent(
     # Option 1: Use Gemini
     # model="gemini-2.0-flash",
-    
+
     # Option 2: Use OpenAI via LiteLLM
     model=LiteLlm(model="openai/gpt-4o"),
-    
+
     # Option 3: Use other providers via LiteLLM
     # model=LiteLlm(model="anthropic/claude-3-opus"),
     # model=LiteLlm(model="openai/gpt-4o-mini"),
-    
+
     name="filesystem_assistant_agent",
     instruction="Help the user manage their files. You can list files, read files, etc.",
     tools=[
@@ -187,8 +187,8 @@ SESSION_ID = "session_001"
 async def create_session():
     """Create session if it doesn't exist."""
     await session_service.create_session(
-        app_name=APP_NAME, 
-        user_id=USER_ID, 
+        app_name=APP_NAME,
+        user_id=USER_ID,
         session_id=SESSION_ID
     )
 
@@ -199,8 +199,8 @@ async def create_session():
 
 # Key Concept: Runner orchestrates the agent execution loop
 runner = Runner(
-    agent=filesystem_agent, 
-    app_name=APP_NAME, 
+    agent=filesystem_agent,
+    app_name=APP_NAME,
     session_service=session_service
 )
 
@@ -212,9 +212,9 @@ runner = Runner(
 async def call_file_system_agent(message: dict):
     """
     Main callback for Google ADK agent.
-    
+
     This is called automatically by OmniDaemon when an event arrives.
-    
+
     Args:
         message: Event envelope containing:
             - content: Your data (query/command)
@@ -224,18 +224,18 @@ async def call_file_system_agent(message: dict):
             - webhook: Callback URL
             - reply_to: Response topic
             - etc.
-    
+
     Returns:
         String with agent response
     """
     # Create session for this interaction
     await create_session()
-    
+
     # Extract query from message
     query = message.get("content")
     if not query:
         return "No content in the message payload"
-    
+
     logger.info(f"\n>>> User Query: {query}")
 
     # Create content for Google ADK
@@ -246,8 +246,8 @@ async def call_file_system_agent(message: dict):
 
     # Run agent asynchronously (stream events)
     async for event in runner.run_async(
-        user_id=USER_ID, 
-        session_id=SESSION_ID, 
+        user_id=USER_ID,
+        session_id=SESSION_ID,
         new_message=content
     ):
         # Check if this is the final response
@@ -275,7 +275,7 @@ async def main():
     try:
         # Register Google ADK agent with OmniDaemon
         logger.info("Registering Google ADK agent...")
-        
+
         await sdk.register_agent(
             agent_config=AgentConfig(
                 name="GOOGLE_ADK_FILESYSTEM_AGENT",
@@ -290,7 +290,7 @@ async def main():
                 ),
             )
         )
-        
+
         logger.info("✅ Agent registered successfully")
 
         # Start the agent runner
@@ -402,8 +402,8 @@ SESSION_ID = "session_001"
 
 # Create session
 await session_service.create_session(
-    app_name=APP_NAME, 
-    user_id=USER_ID, 
+    app_name=APP_NAME,
+    user_id=USER_ID,
     session_id=SESSION_ID
 )
 ```
@@ -419,13 +419,13 @@ await session_service.create_session(
 async def call_file_system_agent(message: dict):
     # Create session
     await create_session()
-    
+
     # Extract query
     query = message.get("content")
-    
+
     # Create Google ADK content
     content = types.Content(role="user", parts=[types.Part(text=query)])
-    
+
     # Run agent (THIS IS WHERE AI RUNS!)
     async for event in runner.run_async(
         user_id=USER_ID,
@@ -435,7 +435,7 @@ async def call_file_system_agent(message: dict):
         if event.is_final_response():
             final_response_text = event.content.parts[0].text
             break
-    
+
     return final_response_text
 ```
 
@@ -524,13 +524,13 @@ async def main():
             content="What files are in the directory?"
         ),
     )
-    
+
     task_id = await sdk.publish_task(event_envelope=event)
     print(f"📨 Task ID: {task_id}")
-    
+
     # Wait for processing
     await asyncio.sleep(5)
-    
+
     # Get result
     result = await sdk.get_result(task_id)
     print(f"✅ Result: {result}")
@@ -598,14 +598,14 @@ async def call_file_system_agent(message: dict):
     # Extract user info from message
     user_id = message.get("tenant_id", "default_user")
     session_id = f"session_{user_id}_{message.get('correlation_id')}"
-    
+
     # Create unique session per user
     await session_service.create_session(
         app_name=APP_NAME,
         user_id=user_id,
         session_id=session_id
     )
-    
+
     # Run with user-specific session
     async for event in runner.run_async(
         user_id=user_id,
@@ -800,4 +800,3 @@ node --version  # Should be v18 or higher
 - Deploy to production!
 
 Google ADK + OmniDaemon = Powerful Gemini agents! 🚀
-

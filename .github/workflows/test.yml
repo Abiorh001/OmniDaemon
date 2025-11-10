@@ -25,13 +25,13 @@ jobs:
         run: |
           # Get list of changed files in the PR
           CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD)
-          
+
           # Check if any test files are added/modified
           TEST_FILES=$(echo "$CHANGED_FILES" | grep -E "(test_.*\.py|.*_test\.py)" || true)
-          
+
           # Check if source files are changed
           SOURCE_FILES=$(echo "$CHANGED_FILES" | grep -E "^src/" || true)
-          
+
           if [ -n "$SOURCE_FILES" ] && [ -z "$TEST_FILES" ]; then
             echo "❌ ERROR: Source code was modified but no test files were added or modified!"
             echo ""
@@ -44,7 +44,7 @@ jobs:
             echo "  - *_test.py"
             exit 1
           fi
-          
+
           if [ -n "$TEST_FILES" ]; then
             echo "✅ Test files found:"
             echo "$TEST_FILES"
@@ -59,7 +59,7 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.10", "3.11", "3.12", "3.13"]
-    
+
     services:
       redis:
         image: redis:7-alpine
@@ -70,7 +70,7 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -111,16 +111,16 @@ jobs:
           python3 << 'EOF'
           import json
           import sys
-          
+
           with open('coverage.json', 'r') as f:
               data = json.load(f)
-          
+
           coverage = data['totals']['percent_covered']
           threshold = 70  # Minimum 70% coverage
-          
+
           print(f"Current coverage: {coverage:.2f}%")
           print(f"Minimum threshold: {threshold}%")
-          
+
           if coverage < threshold:
               print(f"❌ Coverage {coverage:.2f}% is below threshold of {threshold}%")
               sys.exit(1)
@@ -135,13 +135,13 @@ jobs:
           import json
           import re
           from urllib.parse import quote
-          
+
           # Read coverage data
           with open('coverage.json', 'r') as f:
               data = json.load(f)
-          
+
           coverage = data['totals']['percent_covered']
-          
+
           # Determine badge color based on coverage
           if coverage >= 90:
               color = "brightgreen"
@@ -155,24 +155,24 @@ jobs:
               color = "orange"
           else:
               color = "red"
-          
+
           # Read README
           with open('README.md', 'r') as f:
               readme = f.read()
-          
+
           # Update coverage badge
           coverage_str = f"{coverage:.2f}%"
           # URL encode the coverage string for the badge (shields.io format)
           coverage_encoded = quote(coverage_str, safe='')
           badge_pattern = r'\[!\[Coverage\]\(https://img\.shields\.io/badge/coverage-[^)]+\)\]'
           new_badge = f'[![Coverage](https://img.shields.io/badge/coverage-{coverage_encoded}-{color})](https://github.com/omnirexflora-labs/OmniDaemon)'
-          
+
           updated_readme = re.sub(badge_pattern, new_badge, readme)
-          
+
           # Write back
           with open('README.md', 'w') as f:
               f.write(updated_readme)
-          
+
           print(f"✅ Updated coverage badge to {coverage_str} ({color})")
           EOF
 
@@ -221,4 +221,3 @@ jobs:
       - name: Run mypy
         run: |
           uv run mypy src/
-

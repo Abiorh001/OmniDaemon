@@ -83,7 +83,7 @@ async def main():
             content={"name": "Alice"}          # REQUIRED: Your data
         ),
     )
-    
+
     # Publish
     task_id = await sdk.publish_task(event_envelope=event)
     print(f"✅ Published! Task ID: {task_id}")
@@ -124,29 +124,29 @@ async def main():
                 "filename": "report.pdf",
                 "data": "..."
             },
-            
+
             # OPTIONAL: Webhook callback
             webhook="https://your-api.com/webhook/results",
-            
+
             # OPTIONAL: Reply to topic (agent-to-agent)
             reply_to="file_system.response",
         ),
-        
+
         # OPTIONAL: Tracking IDs
         correlation_id="req-12345",          # Track across requests
         causation_id="evt-67890",            # Track causality chain
         source="api-gateway",                # Where event came from
-        
+
         # OPTIONAL: Multi-tenancy
         tenant_id="tenant-acme-corp",        # Isolate by customer
     )
-    
+
     task_id = await sdk.publish_task(event_envelope=event)
     print(f"✅ Task ID: {task_id}")
-    
+
     # Wait for processing
     await asyncio.sleep(3)
-    
+
     # Get result (24h TTL)
     result = await sdk.get_result(task_id)
     print(f"✅ Result: {result}")
@@ -172,8 +172,8 @@ asyncio.run(main())
 
 #### `topic` (Required)
 
-**What:** The topic (channel) to publish to  
-**Format:** `{domain}.{action}` (convention)  
+**What:** The topic (channel) to publish to
+**Format:** `{domain}.{action}` (convention)
 **Example:**
 ```python
 topic="file.uploaded"
@@ -187,8 +187,8 @@ topic="analysis.requested"
 
 #### `payload.content` (Required)
 
-**What:** Your actual data  
-**Format:** Any JSON-serializable dict  
+**What:** Your actual data
+**Format:** Any JSON-serializable dict
 **Example:**
 ```python
 content={
@@ -204,9 +204,9 @@ content={
 
 #### `payload.webhook` (Optional)
 
-**What:** HTTP URL to POST result to when processing completes  
-**When to use:** When you want push notifications instead of polling  
-**TTL:** Results stored for 24 hours  
+**What:** HTTP URL to POST result to when processing completes
+**When to use:** When you want push notifications instead of polling
+**TTL:** Results stored for 24 hours
 
 **Example:**
 ```python
@@ -243,17 +243,17 @@ payload=PayloadBase(
 async def handle_result(payload: dict):
     task_id = payload["task_id"]
     result = payload["result"]
-    
+
     # Process result
     logger.info(f"Task {task_id} completed: {result}")
-    
+
     return {"status": "acknowledged"}
 ```
 
 #### `payload.reply_to` (Optional)
 
-**What:** Topic to publish result to (agent-to-agent communication)  
-**When to use:** When building agent pipelines/workflows  
+**What:** Topic to publish result to (agent-to-agent communication)
+**When to use:** When building agent pipelines/workflows
 
 **Example:**
 ```python
@@ -282,7 +282,7 @@ await sdk.register_agent(
 # Inside callback:
 async def process_file(message: dict):
     result = {"file_data": "..."}
-    
+
     # Publish to next agent
     if message.get("reply_to"):
         await sdk.publish_task(
@@ -291,7 +291,7 @@ async def process_file(message: dict):
                 payload=PayloadBase(content=result)
             )
         )
-    
+
     return result
 
 # Agent 2: Analyze data
@@ -311,8 +311,8 @@ await sdk.register_agent(
 
 #### `correlation_id` (Optional)
 
-**What:** Track a single request across multiple events  
-**Format:** String (UUID recommended)  
+**What:** Track a single request across multiple events
+**Format:** String (UUID recommended)
 **Lifetime:** Passed through entire event chain
 
 **Example:**
@@ -335,9 +335,9 @@ event = EventEnvelope(
 ```python
 async def process_event(message: dict):
     correlation_id = message.get("correlation_id")
-    
+
     logger.info(f"[{correlation_id}] Processing event")
-    
+
     # Pass to downstream events
     await sdk.publish_task(
         EventEnvelope(
@@ -350,8 +350,8 @@ async def process_event(message: dict):
 
 #### `causation_id` (Optional)
 
-**What:** Track cause-effect relationships in event chains  
-**Format:** String (usually the ID of the triggering event)  
+**What:** Track cause-effect relationships in event chains
+**Format:** String (usually the ID of the triggering event)
 **Difference from correlation_id:** Shows parent-child relationships
 
 **Example:**
@@ -391,7 +391,7 @@ event3 = EventEnvelope(
 
 #### `source` (Optional)
 
-**What:** Identifies where the event originated  
+**What:** Identifies where the event originated
 **Format:** String (system/service name)
 
 **Example:**
@@ -413,7 +413,7 @@ event = EventEnvelope(
 ```python
 async def process_event(message: dict):
     source = message.get("source")
-    
+
     if source == "mobile-app":
         # Mobile-specific logic
         pass
@@ -424,8 +424,8 @@ async def process_event(message: dict):
 
 #### `tenant_id` (Optional)
 
-**What:** Isolate data by customer/organization  
-**Format:** String (customer identifier)  
+**What:** Isolate data by customer/organization
+**Format:** String (customer identifier)
 **Lifetime:** Passed through entire event chain
 
 **Example:**
@@ -447,13 +447,13 @@ event = EventEnvelope(
 ```python
 async def process_event(message: dict):
     tenant_id = message.get("tenant_id")
-    
+
     # Load tenant-specific config
     config = get_tenant_config(tenant_id)
-    
+
     # Process with tenant context
     result = process_with_config(message["content"], config)
-    
+
     # Store result with tenant isolation
     await save_result(tenant_id, result)
 ```
@@ -559,14 +559,14 @@ async def wait_for_result():
             payload=PayloadBase(content={"file": "doc.pdf"}),
         )
     )
-    
+
     # Poll until ready
     for i in range(30):  # 30 attempts
         result = await sdk.get_result(task_id)
         if result:
             return result
         await asyncio.sleep(1)
-    
+
     raise TimeoutError("Result not ready after 30s")
 ```
 
@@ -576,7 +576,7 @@ async def wait_for_result():
 # Publish multiple events
 async def batch_publish():
     tasks = []
-    
+
     for item in items:
         event = EventEnvelope(
             topic="process.item",
@@ -584,7 +584,7 @@ async def batch_publish():
         )
         task_id = await sdk.publish_task(event_envelope=event)
         tasks.append(task_id)
-    
+
     print(f"✅ Published {len(tasks)} tasks")
     return tasks
 ```
@@ -601,7 +601,7 @@ async def with_webhook():
             webhook="https://your-api.com/webhook/completion"
         ),
     )
-    
+
     task_id = await sdk.publish_task(event_envelope=event)
     print(f"✅ Task {task_id} will POST to webhook when done")
 ```
@@ -621,7 +621,7 @@ async def agent_pipeline():
         ),
     )
     await sdk.publish_task(event_envelope=event1)
-    
+
     # Stage 2 agent (listening to file.scan) processes
     # Stage 2 replies to file.process
     # Stage 3 agent (listening to file.process) finishes
@@ -674,9 +674,9 @@ async def publish_tasks():
         # Optional webhook
         # "webhook": "http://localhost:8004/results",
     }
-    
+
     topic = "file_system.tasks"
-    
+
     event_payload = EventEnvelope(
         topic=topic,
         payload=PayloadBase(
@@ -684,14 +684,14 @@ async def publish_tasks():
             webhook=payload.get("webhook"),
         ),
     )
-    
+
     task_id = await sdk.publish_task(event_envelope=event_payload)
     print(f"✅ Published task: {task_id}")
-    
+
     # Wait for processing
     print("⏳ Waiting for agent to process...")
     await asyncio.sleep(10)
-    
+
     # Get result
     result = await sdk.get_result(task_id)
     if result:
@@ -778,7 +778,7 @@ async def process_event(message: dict):
     # Extract IDs
     correlation_id = message.get("correlation_id")
     tenant_id = message.get("tenant_id")
-    
+
     # Propagate to next event
     await sdk.publish_task(
         EventEnvelope(
@@ -885,4 +885,3 @@ event = EventEnvelope(
 - Handle expiration gracefully
 
 Publishing events to OmniDaemon is simple yet powerful! 🚀
-

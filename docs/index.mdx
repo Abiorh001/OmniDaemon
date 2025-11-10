@@ -227,7 +227,7 @@ EVENT_BUS_TYPE=redis_stream + REDIS_URL=...         # Current
 EVENT_BUS_TYPE=rabbitmq + RABBITMQ_URL=...          # Coming soon
 EVENT_BUS_TYPE=kafka + KAFKA_SERVERS=...            # Coming soon
 
-# Storage - Switch backends with NO code changes  
+# Storage - Switch backends with NO code changes
 STORAGE_BACKEND=json + JSON_STORAGE_DIR=...         # Development
 STORAGE_BACKEND=redis + REDIS_URL=...               # Production
 STORAGE_BACKEND=postgresql + POSTGRES_URL=...       # Coming soon
@@ -365,7 +365,7 @@ async def main():
     )
     await sdk.start()
     print("🎧 Agent running. Press Ctrl+C to stop.")
-    
+
     try:
         while True:
             await asyncio.sleep(1)
@@ -429,4 +429,3 @@ This documentation is inspired by Sean Falconer's article: ["The Future of AI Ag
 *From the creators of [OmniCore Agent](https://github.com/omnirexflora-labs/omnicoreagent) — building the future of event-driven AI systems*
 
 [⭐ Star on GitHub](https://github.com/omnirexflora-labs/OmniDaemon) · [🐛 Report Bug](https://github.com/omnirexflora-labs/OmniDaemon/issues) · [💡 Request Feature](https://github.com/omnirexflora-labs/OmniDaemon/issues)
-

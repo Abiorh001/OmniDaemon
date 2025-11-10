@@ -79,10 +79,10 @@ We follow **PEP 8** with some modifications:
 async def process_message(message: dict) -> dict:
     """
     Process a message from the event bus.
-    
+
     Args:
         message: Event envelope containing payload
-        
+
     Returns:
         Processed result dictionary
     """
@@ -156,17 +156,17 @@ from omnidaemon import OmniDaemonSDK
 async def test_publish_task():
     """Test task publishing functionality."""
     sdk = OmniDaemonSDK()
-    
+
     # Arrange
     topic = "test.topic"
     payload = {"content": "test message"}
-    
+
     # Act
     message_id = await sdk.publish_task(
         topic=topic,
         payload=payload
     )
-    
+
     # Assert
     assert message_id is not None
     assert isinstance(message_id, str)
@@ -176,10 +176,10 @@ async def test_publish_task():
 async def test_register_agent():
     """Test agent registration."""
     sdk = OmniDaemonSDK()
-    
+
     async def test_callback(message):
         return {"status": "success"}
-    
+
     # Act
     sdk.register_agent(
         agent_config=AgentConfig(
@@ -188,7 +188,7 @@ async def test_register_agent():
         ),
         callback=test_callback
     )
-    
+
     # Assert
     agents = await sdk.list_agents()
     assert len(agents) > 0
@@ -235,14 +235,14 @@ from typing import Callable, Optional
 class KafkaEventBus(BaseEventBus):
     """
     Kafka-based event bus implementation.
-    
+
     Uses Apache Kafka for durable, high-throughput messaging.
-    
+
     Args:
         bootstrap_servers: Kafka bootstrap servers
         group_id: Consumer group ID
         **kafka_config: Additional Kafka configuration
-        
+
     Example:
         >>> bus = KafkaEventBus(
         ...     bootstrap_servers="localhost:9092",
@@ -250,7 +250,7 @@ class KafkaEventBus(BaseEventBus):
         ... )
         >>> await bus.connect()
     """
-    
+
     def __init__(
         self,
         bootstrap_servers: str,
@@ -262,17 +262,17 @@ class KafkaEventBus(BaseEventBus):
         self.kafka_config = kafka_config
         self.producer = None
         self.consumer = None
-    
+
     async def connect(self) -> None:
         """Establish connection to Kafka cluster."""
         from aiokafka import AIOKafkaProducer, AIOKafkaConsumer
-        
+
         self.producer = AIOKafkaProducer(
             bootstrap_servers=self.bootstrap_servers,
             **self.kafka_config
         )
         await self.producer.start()
-    
+
     async def publish(
         self,
         topic: str,
@@ -281,11 +281,11 @@ class KafkaEventBus(BaseEventBus):
     ) -> str:
         """Publish message to Kafka topic."""
         import json
-        
+
         message = json.dumps(payload).encode('utf-8')
         metadata = await self.producer.send(topic, message)
         return f"{metadata.topic}-{metadata.partition}-{metadata.offset}"
-    
+
     # Implement other abstract methods...
 ```
 
@@ -678,4 +678,3 @@ Your contributions make OmniDaemon better for everyone. Whether it's code, docum
 ---
 
 **Created by [Abiola Adeshina](https://github.com/Abiorh001) and the OmniDaemon Community**
-

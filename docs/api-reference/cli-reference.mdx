@@ -104,7 +104,7 @@ Runner ID: runner-abc-123
 Uptime: 2.5 hours
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                      🔌 Connections                      
+                      🔌 Connections
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Event Bus:  ✓ Healthy (redis_stream)
@@ -301,7 +301,7 @@ omnidaemon agent delete \
 ⚠ WARNING: This will permanently delete the agent!
    Topic: file_system.tasks
    Agent: OLD_AGENT
-   
+
 Delete consumer group? Yes
 Delete DLQ? No
 
@@ -335,7 +335,7 @@ omnidaemon agent unsubscribe --topic file_system.tasks --name FILE_PROCESSOR
 ⏸ Pausing agent...
 
 ✓ Agent unsubscribed (paused)
-  
+
   To resume: restart the agent runner
   Consumer group and DLQ preserved
 ```
@@ -381,7 +381,7 @@ omnidaemon task publish \
 ✓ Task published
   Task ID: 550e8400-e29b-41d4-a716-446655440000
   Topic: file_system.tasks
-  
+
   To get result:
     omnidaemon task get --task-id 550e8400-e29b-41d4-a716-446655440000
 ```
@@ -1037,9 +1037,9 @@ for topic in $(echo "$metrics" | jq -r 'keys[]'); do
     for agent in $(echo "$metrics" | jq -r ".\"$topic\" | keys[]"); do
         received=$(echo "$metrics" | jq -r ".\"$topic\".\"$agent\".received")
         failed=$(echo "$metrics" | jq -r ".\"$topic\".\"$agent\".failed")
-        
+
         failure_rate=$(echo "scale=2; $failed * 100 / $received" | bc)
-        
+
         if (( $(echo "$failure_rate > 5" | bc -l) )); then
             echo "⚠ High failure rate: $agent ($failure_rate%)"
             # Send alert
@@ -1058,7 +1058,7 @@ topics=("file_system.tasks" "analysis.tasks")
 
 for topic in "${topics[@]}"; do
     count=$(omnidaemon bus dlq --topic "$topic" --format json | jq 'length')
-    
+
     if [ "$count" -gt 0 ]; then
         echo "⚠ DLQ has $count entries for $topic"
         # Send alert
@@ -1196,4 +1196,3 @@ omnidaemon storage health      # Storage status
 - 130 = Interrupted
 
 The CLI provides a beautiful, production-ready interface! 🎨✨
-

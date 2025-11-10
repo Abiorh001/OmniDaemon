@@ -319,41 +319,41 @@ Or email: security@mintify.com
 
 ### General
 
-**Q: Is OmniDaemon free?**  
+**Q: Is OmniDaemon free?**
 A: Yes! OmniDaemon is open source (MIT license). Enterprise support is available for purchase.
 
-**Q: Which AI frameworks are supported?**  
+**Q: Which AI frameworks are supported?**
 A: All of them! OmniDaemon is framework-agnostic. Use OmniCore Agent, Google ADK, LangChain, CrewAI, or any Python callable.
 
-**Q: Do I need Redis?**  
+**Q: Do I need Redis?**
 A: Redis is the default backend, but OmniDaemon is pluggable. Kafka, RabbitMQ, and other backends are on the roadmap.
 
-**Q: Can I use OmniDaemon in production?**  
+**Q: Can I use OmniDaemon in production?**
 A: Absolutely! OmniDaemon is designed for production use with features like DLQ, retries, metrics, and horizontal scaling.
 
 ### Technical
 
-**Q: How do I scale OmniDaemon?**  
+**Q: How do I scale OmniDaemon?**
 A: Just run more agent runner processes. They automatically load balance via consumer groups.
 
-**Q: How are failures handled?**  
+**Q: How are failures handled?**
 A: Automatic retries with exponential backoff. After N retries, messages go to Dead Letter Queue (DLQ) for manual review.
 
-**Q: Can I run multiple agents?**  
+**Q: Can I run multiple agents?**
 A: Yes! Register multiple agents in one runner, or run multiple runners with different agents.
 
-**Q: How do I monitor agents?**  
+**Q: How do I monitor agents?**
 A: Use `omnidaemon health`, `omnidaemon metrics`, and `omnidaemon bus` commands. Prometheus integration coming soon.
 
 ### Troubleshooting
 
-**Q: Agent not receiving messages?**  
+**Q: Agent not receiving messages?**
 A: Check consumer group with `omnidaemon bus groups --topic your.topic`
 
-**Q: High memory usage?**  
+**Q: High memory usage?**
 A: Reduce `OMNIDAEMON_DEFAULT_MAXLEN` to limit stream size.
 
-**Q: Messages in DLQ?**  
+**Q: Messages in DLQ?**
 A: Check with `omnidaemon bus dlq --topic your.topic` and inspect errors.
 
 **See full troubleshooting:** [README Troubleshooting](https://github.com/omnirexflora-labs/OmniDaemon/blob/main/README.md#troubleshooting)
@@ -388,4 +388,3 @@ A: Check with `omnidaemon bus dlq --topic your.topic` and inspect errors.
 **Thank you for being part of the OmniDaemon community!** 🚀
 
 **Questions?** [Ask on GitHub Discussions](https://github.com/omnirexflora-labs/OmniDaemon/discussions)
-

@@ -24,8 +24,8 @@ This comprehensive guide covers all OmniDaemon configuration options, from envir
 
 #### `EVENT_BUS_TYPE` (Required)
 
-**What:** Event bus backend type  
-**Default:** `redis_stream`  
+**What:** Event bus backend type
+**Default:** `redis_stream`
 **Options:**
 - `redis_stream` ✅ Production-ready
 - `kafka` 🚧 Coming soon
@@ -39,8 +39,8 @@ EVENT_BUS_TYPE=redis_stream
 
 #### `STORAGE_BACKEND` (Required)
 
-**What:** Storage backend type  
-**Default:** `json`  
+**What:** Storage backend type
+**Default:** `json`
 **Options:**
 - `json` ✅ Development (file-based)
 - `redis` ✅ Production (in-memory + persistent)
@@ -58,8 +58,8 @@ STORAGE_BACKEND=redis
 
 #### `REDIS_URL` (Required if using Redis)
 
-**What:** Redis connection URL  
-**Format:** `redis://[username:password@]host:port[/database]`  
+**What:** Redis connection URL
+**Format:** `redis://[username:password@]host:port[/database]`
 **Default:** `redis://localhost:6379`
 
 **Examples:**
@@ -88,8 +88,8 @@ REDIS_URL=rediss://secure-redis:6380  # Note: rediss://
 
 #### `REDIS_KEY_PREFIX` (Optional)
 
-**What:** Namespace for Redis keys  
-**Default:** `omni`  
+**What:** Namespace for Redis keys
+**Default:** `omni`
 **Use case:** Multiple OmniDaemon instances on same Redis
 
 **Example:**
@@ -104,7 +104,7 @@ REDIS_KEY_PREFIX=omni_production
 
 #### `JSON_STORAGE_DIR` (Optional)
 
-**What:** Directory for JSON files  
+**What:** Directory for JSON files
 **Default:** `.omnidaemon_data`
 
 **Example:**
@@ -127,8 +127,8 @@ JSON_STORAGE_DIR=/var/lib/omnidaemon/data
 
 #### `OMNIDAEMON_API_ENABLED` (Optional)
 
-**What:** Enable HTTP API server  
-**Default:** `false`  
+**What:** Enable HTTP API server
+**Default:** `false`
 **Type:** Boolean
 
 **Example:**
@@ -138,8 +138,8 @@ OMNIDAEMON_API_ENABLED=true
 
 #### `OMNIDAEMON_API_PORT` (Optional)
 
-**What:** API server port  
-**Default:** `8765`  
+**What:** API server port
+**Default:** `8765`
 **Type:** Integer
 
 **Example:**
@@ -149,7 +149,7 @@ OMNIDAEMON_API_PORT=8765
 
 #### `OMNIDAEMON_API_HOST` (Optional)
 
-**What:** API server host  
+**What:** API server host
 **Default:** `0.0.0.0` (all interfaces)
 
 **Example:**
@@ -163,8 +163,8 @@ OMNIDAEMON_API_HOST=127.0.0.1  # Localhost only
 
 #### `LOG_LEVEL` (Optional)
 
-**What:** Logging verbosity  
-**Default:** `INFO`  
+**What:** Logging verbosity
+**Default:** `INFO`
 **Options:** `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`
 
 **Example:**
@@ -264,20 +264,20 @@ await sdk.register_agent(
         # REQUIRED
         topic="file.uploaded",
         callback=process_file,
-        
+
         # OPTIONAL
         name="file-processor",
         description="Processes uploaded files",
         tools=["file_reader", "image_processor"],
-        
+
         config=SubscriptionConfig(
             # Consumer settings
             consumer_count=3,              # Number of parallel consumers
-            
+
             # Retry settings
             reclaim_idle_ms=300000,        # 5 minutes
             dlq_retry_limit=3,             # Max retries before DLQ
-            
+
             # Advanced (rarely changed)
             group_name=None,               # Auto-generated if None
             consumer_name=None,            # Auto-generated if None
@@ -290,8 +290,8 @@ await sdk.register_agent(
 
 #### `consumer_count` (Optional)
 
-**What:** Number of parallel consumers for this agent  
-**Default:** `1`  
+**What:** Number of parallel consumers for this agent
+**Default:** `1`
 **Range:** `1` to `100+`
 
 **When to increase:**
@@ -328,8 +328,8 @@ consumer_count=10 → 10 messages processed in parallel
 
 #### `reclaim_idle_ms` (Optional)
 
-**What:** How long (milliseconds) before reclaiming a stuck message  
-**Default:** `180000` (3 minutes)  
+**What:** How long (milliseconds) before reclaiming a stuck message
+**Default:** `180000` (3 minutes)
 **Range:** `1000` (1 second) to `3600000` (1 hour)
 
 **How it works:**
@@ -373,8 +373,8 @@ Example:
 
 #### `dlq_retry_limit` (Optional)
 
-**What:** Max retries before sending to Dead Letter Queue  
-**Default:** `3`  
+**What:** Max retries before sending to Dead Letter Queue
+**Default:** `3`
 **Range:** `0` (no retries) to `10+`
 
 **How it works:**
@@ -541,7 +541,7 @@ async def fast_callback(message: dict):
     # - Heavy computation
     # - Blocking I/O
     # - External API calls
-    
+
     # Use:
     # - In-memory operations
     # - Async I/O
@@ -637,10 +637,10 @@ tls-ca-cert-file /path/to/ca.crt
 server {
     listen 443 ssl;
     server_name api.example.com;
-    
+
     ssl_certificate /path/to/cert.pem;
     ssl_certificate_key /path/to/key.pem;
-    
+
     location / {
         proxy_pass http://127.0.0.1:8765;
         proxy_set_header X-Real-IP $remote_addr;
@@ -688,7 +688,7 @@ from decouple import config
 
 def validate_config():
     required = ["EVENT_BUS_TYPE", "STORAGE_BACKEND"]
-    
+
     for var in required:
         try:
             value = config(var)
@@ -697,7 +697,7 @@ def validate_config():
         except Exception as e:
             print(f"❌ Missing required config: {var}")
             raise SystemExit(1)
-    
+
     print("✅ Configuration valid")
 
 validate_config()
@@ -854,4 +854,3 @@ dlq_retry_limit=3          # Max retries
 - Test all environments
 
 Configuration is the foundation of production deployment! ⚙️✨
-

@@ -13,7 +13,7 @@ A **callback** is the function that OmniDaemon calls when an event arrives for y
 async def my_agent(message: dict):
     """
     CALLBACK = Where your AI agent runs!
-    
+
     This function is called automatically when an event arrives.
     """
     # Your logic here
@@ -38,20 +38,20 @@ The `message` parameter contains the **full EventEnvelope** sent by the publishe
 async def my_agent(message: dict):
     # YOUR DATA
     content = message.get("content", {})        # The actual data
-    
+
     # METADATA
     correlation_id = message.get("correlation_id")  # Track requests
     causation_id = message.get("causation_id")      # Event chain
     tenant_id = message.get("tenant_id")            # Multi-tenancy
     source = message.get("source")                  # Event origin
-    
+
     # RESPONSE HANDLING
     webhook = message.get("webhook")                # HTTP callback
     reply_to = message.get("reply_to")              # Response topic
-    
+
     # TIMESTAMPS
     created_at = message.get("created_at")          # When published
-    
+
     # Use this data to make smart decisions!
     return {"status": "processed"}
 ```
@@ -98,10 +98,10 @@ async def analyze_document(message: dict):
     """Process document with OmniCore Agent"""
     content = message.get("content", {})
     filename = content.get("filename")
-    
+
     # THIS is where your AI agent runs!
     result = await agent.run(f"Analyze: {filename}")
-    
+
     return {
         "status": "success",
         "analysis": result,
@@ -136,7 +136,7 @@ async def handle_query(message: dict):
     """Process query with Google ADK"""
     content = message.get("content", {})
     query = content.get("query")
-    
+
     # THIS is where your AI agent runs!
     async for event in runner.run_async(
         user_id="user",
@@ -158,10 +158,10 @@ async def process_data(message: dict):
     """Simple data processing"""
     content = message.get("content", {})
     data = content.get("data")
-    
+
     # Your logic here
     processed = data * 2
-    
+
     return {
         "status": "success",
         "result": processed
@@ -181,13 +181,13 @@ async def multi_tenant_agent(message: dict):
     """Route processing based on tenant"""
     tenant_id = message.get("tenant_id", "default")
     content = message.get("content", {})
-    
+
     # Load tenant-specific configuration
     tenant_config = await load_tenant_config(tenant_id)
-    
+
     # Process with tenant settings
     result = await process_with_config(content, tenant_config)
-    
+
     return {
         "status": "success",
         "tenant_id": tenant_id,
@@ -202,14 +202,14 @@ async def tracking_agent(message: dict):
     """Track requests using correlation_id"""
     correlation_id = message.get("correlation_id")
     content = message.get("content", {})
-    
+
     # Log request start
     logger.info(f"[{correlation_id}] Processing started")
-    
+
     try:
         result = await process(content)
         logger.info(f"[{correlation_id}] Success")
-        
+
         return {
             "status": "success",
             "correlation_id": correlation_id,
@@ -227,21 +227,21 @@ async def source_aware_agent(message: dict):
     """Different logic based on event source"""
     source = message.get("source", "unknown")
     content = message.get("content", {})
-    
+
     if source == "web-app":
         # Web uploads need virus scanning
         await scan_for_viruses(content)
-    
+
     elif source == "api":
         # API uploads are pre-validated
         pass
-    
+
     elif source == "mobile-app":
         # Mobile uploads need compression
         await compress_file(content)
-    
+
     result = await process(content)
-    
+
     return {"status": "success", "source": source, "result": result}
 ```
 
@@ -253,12 +253,12 @@ async def chain_tracking_agent(message: dict):
     correlation_id = message.get("correlation_id")
     causation_id = message.get("causation_id")
     content = message.get("content", {})
-    
+
     # Log the chain
     logger.info(f"Event chain: {causation_id} → {correlation_id}")
-    
+
     result = await process(content)
-    
+
     # Publish next event in chain
     await sdk.publish_task(
         event_envelope=EventEnvelope(
@@ -270,7 +270,7 @@ async def chain_tracking_agent(message: dict):
             )
         )
     )
-    
+
     return {"status": "success"}
 ```
 
@@ -282,17 +282,17 @@ async def conditional_agent(message: dict):
     tenant_id = message.get("tenant_id")
     source = message.get("source")
     content = message.get("content", {})
-    
+
     # Check if we should process
     if not await should_process(tenant_id, source):
         return {
             "status": "skipped",
             "reason": "Conditions not met"
         }
-    
+
     # Process
     result = await process(content)
-    
+
     return {"status": "processed", "result": result}
 ```
 
@@ -303,15 +303,15 @@ async def webhook_agent(message: dict):
     """Automatic webhook notification"""
     webhook = message.get("webhook")
     content = message.get("content", {})
-    
+
     # Process
     result = await process(content)
-    
+
     # OmniDaemon automatically POSTs result to webhook
     # But you can also do it manually for custom logic:
     if webhook:
         await http_post(webhook, result)
-    
+
     return {"status": "success", "result": result}
 ```
 
@@ -326,7 +326,7 @@ Your callback should return a **dictionary** (or None).
 ```python
 async def my_agent(message: dict):
     result = await process(message)
-    
+
     return {
         "status": "success",
         "result": result,
@@ -341,7 +341,7 @@ async def my_agent(message: dict):
     try:
         result = await process(message)
         return {"status": "success", "result": result}
-    
+
     except ValueError as e:
         # Permanent error - don't retry
         return {
@@ -378,12 +378,12 @@ async def my_agent(message: dict):
     try:
         result = await process(message)
         return {"status": "success", "result": result}
-    
+
     except NetworkError as e:
         # RETRIABLE: Network issues, rate limits, timeouts
         logger.warning(f"Temporary failure: {e}")
         raise  # OmniDaemon will retry
-    
+
     except ValidationError as e:
         # NON-RETRIABLE: Bad data, invalid input
         logger.error(f"Permanent failure: {e}")
@@ -413,11 +413,11 @@ async def smart_retry_agent(message: dict):
     """Custom retry logic on top of OmniDaemon's retries"""
     content = message.get("content", {})
     retry_count = content.get("_retry_count", 0)
-    
+
     try:
         result = await process(content)
         return {"status": "success", "result": result}
-    
+
     except TemporaryError as e:
         # Retriable error
         if retry_count < 3:
@@ -431,7 +431,7 @@ async def smart_retry_agent(message: dict):
                 "error": str(e),
                 "retries": retry_count
             }
-    
+
     except PermanentError as e:
         # Non-retriable error
         return {"status": "error", "error": str(e)}
@@ -483,7 +483,7 @@ async def good_agent(message: dict):
 async def timeout_agent(message: dict):
     """Add timeout to prevent hanging"""
     import asyncio
-    
+
     try:
         # Timeout after 30 seconds
         result = await asyncio.wait_for(
@@ -491,7 +491,7 @@ async def timeout_agent(message: dict):
             timeout=30.0
         )
         return {"status": "success", "result": result}
-    
+
     except asyncio.TimeoutError:
         logger.error("Processing timeout")
         return {
@@ -550,16 +550,16 @@ async def batch_agent(message: dict):
     """Batch multiple items together"""
     content = message.get("content", {})
     items = content.get("items", [])
-    
+
     # Process in batches
     batch_size = 10
     results = []
-    
+
     for i in range(0, len(items), batch_size):
         batch = items[i:i+batch_size]
         batch_result = await process_batch(batch)
         results.extend(batch_result)
-    
+
     return {"status": "success", "results": results}
 ```
 
@@ -569,14 +569,14 @@ async def batch_agent(message: dict):
 async def parallel_agent(message: dict):
     """Process multiple items in parallel"""
     import asyncio
-    
+
     content = message.get("content", {})
     items = content.get("items", [])
-    
+
     # Process all items concurrently
     tasks = [process_item(item) for item in items]
     results = await asyncio.gather(*tasks)
-    
+
     return {"status": "success", "results": results}
 ```
 
@@ -600,10 +600,10 @@ async def test_my_agent():
         "content": {"value": 5},
         "correlation_id": "test-123"
     }
-    
+
     # Act
     result = await my_agent(message)
-    
+
     # Assert
     assert result["result"] == 10
 ```
@@ -623,11 +623,11 @@ async def my_agent(message: dict):
 async def test_my_agent_mocked(mock_api):
     # Mock external API
     mock_api.return_value = "mocked_result"
-    
+
     # Test
     message = {"content": {"data": "test"}}
     result = await my_agent(message)
-    
+
     assert result["result"] == "mocked_result"
     mock_api.assert_called_once()
 ```
@@ -672,4 +672,3 @@ async def test_my_agent_mocked(mock_api):
 - Webhook notifications
 
 The callback is your agent's brain - use it wisely! 🧠✨
-

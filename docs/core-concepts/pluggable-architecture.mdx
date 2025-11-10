@@ -602,11 +602,11 @@ environments:
   development:
     event_bus: redis_stream  # Simple, fast
     storage: json            # No dependencies
-    
+
   staging:
     event_bus: redis_stream  # Same as dev
     storage: redis           # Test distributed
-    
+
   production:
     event_bus: kafka         # High throughput
     storage: postgresql      # Durable, queryable
@@ -674,4 +674,3 @@ omnidaemon storage health         # Storage health
 
 **The Promise:**
 > "You provide the URL, OmniDaemon handles EVERYTHING else!"
-

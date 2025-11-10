@@ -95,7 +95,7 @@ async def my_agent(message: dict):
 async def main():
     await sdk.register_agent(...)
     await sdk.start()
-    
+
     try:
         while True:
             await asyncio.sleep(1)
@@ -164,7 +164,7 @@ omnidaemon bus dlq --topic file.uploaded
 
 **1. Background AI Processing**
 ```
-Example: User uploads document → AI agent extracts text, 
+Example: User uploads document → AI agent extracts text,
          analyzes sentiment, generates summary
 Why: Runs in background, can take minutes, doesn't block user
 ```
@@ -355,7 +355,7 @@ Swap backends without changing code:
 STORAGE_BACKEND=json
 EVENT_BUS_TYPE=redis_stream
 
-# Production: PostgreSQL + Kafka  
+# Production: PostgreSQL + Kafka
 STORAGE_BACKEND=postgresql
 EVENT_BUS_TYPE=kafka
 ```
@@ -419,4 +419,3 @@ Ready to dive in?
 - 💬 [Join Discussions](https://github.com/omnirexflora-labs/OmniDaemon/discussions)
 - 🐛 [Report Issues](https://github.com/omnirexflora-labs/OmniDaemon/issues)
 - 📧 [Contact Support](../community/support.md)
-

@@ -6,12 +6,11 @@
       <stop offset="100%" style="stop-color:#0d9488;stop-opacity:1" />
     </linearGradient>
   </defs>
-  
+
   <!-- Hexagon background -->
   <path d="M16 2 L28 9 L28 23 L16 30 L4 23 L4 9 Z" fill="url(#tealGradient)"/>
-  
+
   <!-- Letter O in white -->
   <circle cx="16" cy="16" r="7" fill="none" stroke="white" stroke-width="2.5"/>
   <circle cx="16" cy="16" r="3" fill="white"/>
 </svg>
-

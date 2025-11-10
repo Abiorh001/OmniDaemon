@@ -37,7 +37,7 @@ Runner ID: runner-abc-123
 Uptime: 2.5 hours
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                      🔌 Connections                      
+                      🔌 Connections
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Event Bus:  ✓ Healthy (redis_stream)
@@ -663,7 +663,7 @@ async def check_and_alert():
     health = await sdk.health()
     if health["status"] not in ["RUNNING", "READY"]:
         send_alert(f"OmniDaemon health: {health['status']}")
-    
+
     # Check metrics
     metrics = await sdk.metrics()
     for topic, agents in metrics.items():
@@ -671,10 +671,10 @@ async def check_and_alert():
             success_rate = stats["processed"] / stats["received"] * 100
             if success_rate < 95:
                 send_alert(f"{agent} success rate: {success_rate}%")
-            
+
             if stats["avg_processing_time_ms"] > 10000:  # 10 seconds
                 send_alert(f"{agent} slow: {stats['avg_processing_time_ms']}ms")
-    
+
     # Check DLQ
     for topic in ["file_system.tasks", "analysis.tasks"]:
         dlq = await sdk.inspect_dlq(topic, limit=1)
@@ -695,7 +695,7 @@ logger = logging.getLogger("omnidaemon")
 
 async def log_metrics():
     metrics = await sdk.metrics()
-    
+
     for topic, agents in metrics.items():
         for agent, stats in agents.items():
             # JSON logging for Elasticsearch/Splunk
@@ -726,7 +726,7 @@ processing_time = Gauge("omnidaemon_processing_time_ms", "Avg processing time", 
 
 async def export_metrics():
     metrics = await sdk.metrics()
-    
+
     for topic, agents in metrics.items():
         for agent, stats in agents.items():
             tasks_received.labels(topic=topic, agent=agent).inc(stats["received"])
@@ -869,4 +869,3 @@ omnidaemon storage health      # Storage status
 5. Deploy and monitor
 
 Monitoring is key to production success! 📊✨
-

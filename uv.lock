@@ -3100,8 +3100,10 @@ wheels = [
 name = "omnidaemon"
 source = { editable = "." }
 dependencies = [
+    { name = "aiohttp" },
     { name = "fastapi" },
     { name = "pydantic" },
+    { name = "python-decouple" },
     { name = "redis" },
     { name = "rich" },
     { name = "typer" },
@@ -3128,8 +3130,10 @@ examples = [
 
 [package.metadata]
 requires-dist = [
+    { name = "aiohttp", specifier = ">=3.9.0" },
     { name = "fastapi", specifier = ">=0.100.0" },
     { name = "pydantic", specifier = ">=2.0.0" },
+    { name = "python-decouple", specifier = ">=3.8" },
     { name = "redis", specifier = ">=5.0.0" },
     { name = "rich", specifier = ">=13.0.0" },
     { name = "typer", specifier = ">=0.9.0" },

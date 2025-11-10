@@ -385,16 +385,16 @@ from omnidaemon import OmniDaemonSDK
 async def health_check():
     sdk = OmniDaemonSDK()
     health = await sdk.health()
-    
+
     if health["status"] != "running":
         exit(1)  # Fail health check
-    
+
     if health["event_bus"]["status"] != "healthy":
         exit(1)
-    
+
     if health["storage"]["status"] != "healthy":
         exit(1)
-    
+
     print("✅ Healthy")
     exit(0)
 
@@ -419,14 +419,14 @@ async def collect_metrics():
     sdk = OmniDaemonSDK()
     while True:
         metrics = await sdk.get_metrics()
-        
+
         for topic, agents in metrics.items():
             for agent, stats in agents.items():
                 tasks_received.labels(topic, agent).set(stats['tasks_received'])
                 tasks_processed.labels(topic, agent).set(stats['tasks_processed'])
                 tasks_failed.labels(topic, agent).set(stats['tasks_failed'])
                 avg_processing_time.labels(topic, agent).set(stats['avg_processing_time_ms'])
-        
+
         await asyncio.sleep(15)  # Update every 15 seconds
 
 # Start Prometheus metrics server
@@ -716,4 +716,3 @@ Before going live:
 ---
 
 **Need help with deployment?** [Contact us](https://mintify.com) for enterprise support.
-

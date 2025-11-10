@@ -221,9 +221,9 @@ filesystem_agent_runner = OmniAgentRunner()
 async def call_file_system_agent(message: dict):
     """
     Main callback for file system agent.
-    
+
     This is called automatically by OmniDaemon when an event arrives.
-    
+
     Args:
         message: Event envelope containing:
             - content: Your data (query/command)
@@ -233,21 +233,21 @@ async def call_file_system_agent(message: dict):
             - webhook: Callback URL
             - reply_to: Response topic
             - etc.
-    
+
     Returns:
         Dict with status and result
     """
     logger.info(f"Received event: {message}")
-    
+
     # Initialize agent if needed
     await filesystem_agent_runner.initialize()
-    
+
     # Extract query from content
     query = message.get("content")
-    
+
     # Run OmniCore Agent
     result = await filesystem_agent_runner.handle_chat(message=query)
-    
+
     return {
         "status": "success",
         "data": result,
@@ -258,14 +258,14 @@ async def call_file_system_agent(message: dict):
 async def call_response_handler(message: dict):
     """
     Response handler for file system agent responses.
-    
+
     This agent listens to responses from the file system agent.
     """
     logger.info(f"Received response: {message}")
-    
+
     # Process response
     # (Add your logic here)
-    
+
     return {"status": "acknowledged"}
 
 
@@ -277,7 +277,7 @@ async def main():
     try:
         # Register agents with OmniDaemon
         logger.info("Registering agents...")
-        
+
         # Agent 1: File System Agent (processes file operations)
         await sdk.register_agent(
             agent_config=AgentConfig(
@@ -293,7 +293,7 @@ async def main():
                 ),
             )
         )
-        
+
         # Agent 2: Response Handler (processes responses)
         await sdk.register_agent(
             agent_config=AgentConfig(
@@ -309,7 +309,7 @@ async def main():
                 ),
             )
         )
-        
+
         logger.info("✅ Agents registered successfully")
 
         # Start the agent runner
@@ -388,7 +388,7 @@ class OmniAgentRunner:
         # Create routers
         self.memory_router = MemoryRouter("in_memory")
         self.event_router = EventRouter("in_memory")
-        
+
         # Initialize agent
         self.agent = OmniAgent(
             name="filesystem_assistant_agent",
@@ -399,7 +399,7 @@ class OmniAgentRunner:
             memory_router=self.memory_router,
             event_router=self.event_router,
         )
-        
+
         # Connect MCP servers
         await self.agent.connect_mcp_servers()
 ```
@@ -414,16 +414,16 @@ class OmniAgentRunner:
 ```python
 async def call_file_system_agent(message: dict):
     """This is called when an event arrives."""
-    
+
     # Initialize if needed
     await filesystem_agent_runner.initialize()
-    
+
     # Extract query
     query = message.get("content")
-    
+
     # Run OmniCore Agent (THIS IS WHERE AI RUNS!)
     result = await filesystem_agent_runner.handle_chat(message=query)
-    
+
     return {"status": "success", "data": result}
 ```
 
@@ -463,7 +463,7 @@ await sdk.register_agent(
 finally:
     # OmniDaemon cleanup
     await sdk.shutdown()
-    
+
     # OmniCore Agent cleanup
     await filesystem_agent_runner.shutdown()
 ```
@@ -530,13 +530,13 @@ async def main():
             content="List all files in the directory"
         ),
     )
-    
+
     task_id = await sdk.publish_task(event_envelope=event)
     print(f"📨 Task ID: {task_id}")
-    
+
     # Wait for processing
     await asyncio.sleep(5)
-    
+
     # Get result
     result = await sdk.get_result(task_id)
     print(f"✅ Result: {result}")
@@ -762,4 +762,3 @@ except Exception as e:
 - Deploy to production!
 
 OmniCore Agent + OmniDaemon = Powerful event-driven AI! 🚀
-

@@ -229,10 +229,10 @@ sdk = OmniDaemonSDK()
 async def greeter(message: dict):
     """
     This is YOUR callback - where your logic/AI agent executes.
-    
+
     For this simple example, we just return a greeting.
     In real apps, this is where you'd call your AI agent.
-    
+
     See real examples:
     - examples/omnicoreagent/agent_runner.py (OmniCore)
     - examples/google_adk/agent_runner.py (Google ADK)
@@ -249,10 +249,10 @@ async def main():
             callback=greeter,         # REQUIRED: Your function (where AI agent runs)
         )
     )
-    
+
     await sdk.start()
     print("🎧 Agent running. Press Ctrl+C to stop.")
-    
+
     try:
         while True:
             await asyncio.sleep(1)
@@ -328,14 +328,14 @@ async def main():
                 ),
             )
         )
-        
+
         print("✅ Agent registered!")
         await sdk.start()
         print("🎧 Listening for events...")
-        
+
         while True:
             await asyncio.sleep(1)
-            
+
     except KeyboardInterrupt:
         print("\n👋 Shutting down...")
     finally:
@@ -391,10 +391,10 @@ agent = OmniAgent(
 # Callback = where you run your AI agent
 async def my_callback(message: dict):
     content = message.get("content", "")
-    
+
     # THIS is where your AI agent runs!
     result = await agent.run(content)
-    
+
     return {"status": "success", "data": result}
 ```
 
@@ -414,7 +414,7 @@ runner = Runner(agent=agent, app_name="my_app", session_service=session_service)
 # Callback = where you run your AI agent
 async def my_callback(message: dict):
     query = message.get("content", "")
-    
+
     # THIS is where your AI agent runs!
     async for event in runner.run_async(user_id="user", session_id="session", new_message=query):
         if event.is_final_response():
@@ -458,7 +458,7 @@ async def my_callback(message: dict):
     - created_at (timestamp)
     - etc.
     """
-    
+
     # Access any field from the EventEnvelope
     content = message.get("content", {})           # Your data
     correlation_id = message.get("correlation_id")  # Request tracking
@@ -467,7 +467,7 @@ async def my_callback(message: dict):
     causation_id = message.get("causation_id")     # What caused this?
     reply_to = message.get("reply_to")             # Response topic
     webhook = message.get("webhook")               # Callback URL
-    
+
     # Use metadata to make smart decisions!
     # ... (see examples below)
 ```
@@ -489,15 +489,15 @@ You can use this metadata to:
 ```python
 async def my_callback(message: dict):
     tenant_id = message.get("tenant_id")
-    
+
     # Only process if specific tenant
     if tenant_id not in ["tenant-123", "tenant-456"]:
         return {"status": "skipped", "reason": "unauthorized tenant"}
-    
+
     # Load tenant-specific config
     tenant_config = get_tenant_config(tenant_id)
     content = message.get("content", {})
-    
+
     # Process with your AI agent (adapt to your agent's API)
     result = await process_with_agent(content, config=tenant_config)
     return {"status": "success", "data": result, "tenant": tenant_id}
@@ -508,7 +508,7 @@ async def my_callback(message: dict):
 async def my_callback(message: dict):
     source = message.get("source")
     content = message.get("content", {})
-    
+
     # Different logic based on source
     if source == "web-app":
         # Web users get full processing
@@ -522,7 +522,7 @@ async def my_callback(message: dict):
     else:
         # Default behavior
         result = await process_with_agent(content)
-    
+
     return {"status": "success", "data": result, "processed_by": source}
 ```
 
@@ -531,19 +531,19 @@ async def my_callback(message: dict):
 async def my_callback(message: dict):
     correlation_id = message.get("correlation_id")
     content = message.get("content", {})
-    
+
     # Check if this is part of ongoing conversation
     if correlation_id:
         # Load conversation context from your DB
         context = await load_conversation_context(correlation_id)
         result = await process_with_agent(content, context=context)
-        
+
         # Save updated context
         await save_conversation_context(correlation_id, result)
     else:
         # New conversation
         result = await process_with_agent(content)
-    
+
     return {"status": "success", "data": result, "correlation_id": correlation_id}
 ```
 
@@ -552,12 +552,12 @@ async def my_callback(message: dict):
 async def my_callback(message: dict):
     causation_id = message.get("causation_id")
     content = message.get("content", {})
-    
+
     # Check what caused this event
     if causation_id:
         # Load parent event
         parent_event = await get_event(causation_id)
-        
+
         # Process differently based on parent
         if parent_event.get("type") == "user_action":
             priority = "high"
@@ -565,16 +565,16 @@ async def my_callback(message: dict):
             priority = "normal"
         else:
             priority = "low"
-        
+
         result = await process_with_agent(content, priority=priority)
     else:
         # No parent event
         result = await process_with_agent(content)
-    
+
     return {"status": "success", "data": result}
 ```
 
-> 💡 **Note**: `process_with_agent()` is a placeholder. Replace with your actual AI agent's API.  
+> 💡 **Note**: `process_with_agent()` is a placeholder. Replace with your actual AI agent's API.
 > **See real examples**: `examples/omnicoreagent/agent_runner.py` or `examples/google_adk/agent_runner.py`
 
 **Pattern 5: Conditional Response Routing**
@@ -583,23 +583,23 @@ async def my_callback(message: dict):
     content = message.get("content", {})
     reply_to = message.get("reply_to")
     webhook = message.get("webhook")
-    
+
     # Process the task with your AI agent
     result = await process_with_agent(content)
-    
+
     # Smart response handling
     response = {"status": "success", "data": result}
-    
+
     if reply_to:
         # Response will auto-publish to reply_to topic
         # Another agent can pick it up there
         response["note"] = f"Will be published to {reply_to}"
-    
+
     if webhook:
         # Response will be POSTed to webhook
         # Your API will receive it
         response["note"] = f"Will be sent to {webhook}"
-    
+
     # You can also add custom routing logic
     if result.get("needs_review"):
         # Publish to review queue
@@ -610,7 +610,7 @@ async def my_callback(message: dict):
             )
         )
         response["routed_to_review"] = True
-    
+
     return response
 ```
 
@@ -626,18 +626,18 @@ async def my_callback(message: dict):
     tenant_id = message.get("tenant_id")
     source = message.get("source")
     correlation_id = message.get("correlation_id")
-    
+
     # 1. Tenant validation
     if tenant_id and not await is_tenant_authorized(tenant_id):
         return {
-            "status": "error", 
+            "status": "error",
             "error": "Unauthorized tenant",
             "tenant_id": tenant_id
         }
-    
+
     # 2. Load tenant-specific config
     config = await get_tenant_config(tenant_id) if tenant_id else {}
-    
+
     # 3. Check rate limits by source
     if source and await is_rate_limited(source, tenant_id):
         return {
@@ -645,12 +645,12 @@ async def my_callback(message: dict):
             "retry_after": 60,
             "source": source
         }
-    
+
     # 4. Load conversation context if correlated
     context = None
     if correlation_id:
         context = await load_context(correlation_id)
-    
+
     # 5. Process with your AI agent (adapt to your agent's API)
     result = await process_with_agent(
         content,
@@ -658,11 +658,11 @@ async def my_callback(message: dict):
         context=context,
         metadata={"tenant_id": tenant_id, "source": source}
     )
-    
+
     # 6. Save context for next message
     if correlation_id:
         await save_context(correlation_id, result)
-    
+
     # 7. Return enriched response
     return {
         "status": "success",
@@ -676,7 +676,7 @@ async def my_callback(message: dict):
     }
 ```
 
-> 💡 **Note**: All examples use `process_with_agent()` as a placeholder.  
+> 💡 **Note**: All examples use `process_with_agent()` as a placeholder.
 > **Replace with actual agent API**: See `examples/omnicoreagent/agent_runner.py` or `examples/google_adk/agent_runner.py`
 
 ---
@@ -755,10 +755,10 @@ async def main():
             content={"name": "Alice"}     # REQUIRED
         ),
     )
-    
+
     task_id = await sdk.publish_task(event_envelope=event)
     print(f"📨 Task ID: {task_id}")
-    
+
     # Wait and get result
     await asyncio.sleep(2)
     result = await sdk.get_result(task_id)
@@ -797,44 +797,44 @@ async def main():
     # FULL: All optional parameters
     event = EventEnvelope(
         topic="greet.user",                # REQUIRED: Agent's listening topic
-        
+
         payload=PayloadBase(
             content={"name": "Alice", "lang": "en"},    # REQUIRED: Your data
-            
+
             webhook="https://myapp.com/callback",       # Optional: HTTP callback
             # When task completes, OmniDaemon sends POST request to this URL
             # with the result. Great for async notifications to your API!
-            
+
             reply_to="greet.response",                  # Optional: Chain agents
             # Result is published to this topic. Another agent can listen here
             # and process the result. Perfect for agent chaining/workflows!
         ),
-        
+
         # Optional: Multi-tenancy isolation
-        tenant_id="tenant-123",            
+        tenant_id="tenant-123",
         # Isolate data by tenant in multi-tenant systems
-        
-        # Optional: Request tracking across services  
-        correlation_id="req-456",          
+
+        # Optional: Request tracking across services
+        correlation_id="req-456",
         # Track this request across multiple services/agents
         # Same ID flows through entire request chain
-        
+
         # Optional: Causation tracking (what caused what)
         causation_id="cause-789",
         # Track what caused this event (previous event ID)
         # Build causality chains: Event A → Event B → Event C
-        
+
         # Optional: Event source identification
-        source="web-app",                  
+        source="web-app",
         # Where did this event originate? (web-app, mobile-app, cron-job, etc.)
     )
-    
+
     task_id = await sdk.publish_task(event_envelope=event)
     print(f"📨 Published: {task_id}")
     print(f"   Webhook: Will POST result to https://myapp.com/callback")
     print(f"   Reply to: Result will be published to '{event.payload.reply_to}' topic")
     print(f"   Correlation: {event.correlation_id}")
-    
+
     await asyncio.sleep(2)
     result = await sdk.get_result(task_id)
     print(f"✅ Result: {result}")
@@ -879,7 +879,7 @@ async def handle_result(result: dict):
 reply_to="greet.response"
 ```
 **What happens:**
-1. Agent processes your task  
+1. Agent processes your task
 2. Result is **published to `reply_to` topic**
 3. Another agent listening on that topic receives it
 4. Perfect for multi-agent workflows!
@@ -954,7 +954,7 @@ User Request → API (correlation_id: req-456)
             → Database (correlation_id: req-456)
 ```
 
-**Use when:** 
+**Use when:**
 - Debugging distributed systems
 - Tracing requests across services
 - Building observability dashboards
@@ -974,7 +974,7 @@ causation_id="cause-789"
 Event A (id: cause-789)
   ↓ causes
 Event B (causation_id: cause-789, id: effect-123)
-  ↓ causes  
+  ↓ causes
 Event C (causation_id: effect-123, id: final-456)
 ```
 
@@ -1113,7 +1113,7 @@ from omnidaemon import OmniDaemonSDK
 async def main():
     sdk = OmniDaemonSDK()
     health = await sdk.health()
-    
+
     print("\n🏥 System Health Check")
     print("=" * 50)
     print(f"Status: {health['status']}")
@@ -1122,7 +1122,7 @@ async def main():
     print(f"Event Bus: {health['event_bus_type']}")
     print(f"Storage Healthy: {health['storage_healthy']}")
     print("=" * 50)
-    
+
     if health['status'] == 'running':
         print("✅ All systems operational!")
     else:
@@ -1420,7 +1420,7 @@ sdk = OmniDaemonSDK()
 # 2. Loads the appropriate backend class
 # 3. Connects using the provided URL/connection string
 # 4. Injects it into the SDK
-# 
+#
 # You just use the SDK - simple! 🎉
 ```
 
@@ -1538,23 +1538,23 @@ MCP_TOOLS = [
 
 class OmniAgentRunner:
     """Wrapper for OmniCore Agent with lazy initialization."""
-    
+
     def __init__(self):
         self.agent = None
         self.memory_router = None
         self.event_router = None
         self.connected = False
         self.session_id = None
-    
+
     async def initialize(self):
         """Initialize agent components."""
         if self.connected:
             return
-        
+
         # Initialize routers
         self.memory_router = MemoryRouter("in_memory")
         self.event_router = EventRouter("in_memory")
-        
+
         # Initialize agent
         self.agent = OmniAgent(
             name="filesystem_assistant_agent",
@@ -1576,27 +1576,27 @@ class OmniAgentRunner:
             event_router=self.event_router,
             debug=False,
         )
-        
+
         await self.agent.connect_mcp_servers()
         self.connected = True
         logger.info("✅ OmniAgent initialized successfully")
-    
+
     async def handle_chat(self, message: str):
         """Handle chat messages."""
         if not self.agent:
             return "Agent not initialized"
-        
+
         if not self.session_id:
             from datetime import datetime
             self.session_id = f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        
+
         try:
             result = await self.agent.run(message)
             return result.get("response", "No response")
         except Exception as e:
             logger.error(f"Error: {e}")
             return f"Error: {str(e)}"
-    
+
     async def shutdown(self):
         """Cleanup agent resources."""
         if self.agent and hasattr(self.agent, 'cleanup'):
@@ -1631,18 +1631,18 @@ async def main():
                 ),
             )
         )
-        
+
         # Start OmniDaemon agent runner
         logger.info("Starting OmniDaemon...")
         await sdk.start()
         logger.info("✅ OmniDaemon started")
-        
+
         # Start API server if enabled
         if config("OMNIDAEMON_API_ENABLED", default=False, cast=bool):
             api_port = config("OMNIDAEMON_API_PORT", default=8765, cast=int)
             asyncio.create_task(start_api_server(sdk, port=api_port))
             logger.info(f"🌐 API running on http://127.0.0.1:{api_port}")
-        
+
         # Keep running
         logger.info("🎧 Agent runner processing events. Press Ctrl+C to stop.")
         try:
@@ -1650,11 +1650,11 @@ async def main():
                 await asyncio.sleep(1)
         except (KeyboardInterrupt, asyncio.CancelledError):
             logger.info("Received shutdown signal...")
-    
+
     except Exception as e:
         logger.error(f"Error: {e}", exc_info=True)
         raise
-    
+
     finally:
         logger.info("Shutting down...")
         try:
@@ -1745,8 +1745,8 @@ SESSION_ID = "session_001"
 
 async def create_session():
     await session_service.create_session(
-        app_name=APP_NAME, 
-        user_id=USER_ID, 
+        app_name=APP_NAME,
+        user_id=USER_ID,
         session_id=SESSION_ID
     )
 
@@ -1760,20 +1760,20 @@ runner = Runner(
 async def call_file_system_agent(message: dict):
     """OmniDaemon callback for Google ADK agent."""
     await create_session()
-    
+
     query = message.get("content")
     if not query:
         return "No content in message payload"
-    
+
     logger.info(f">>> User Query: {query}")
-    
+
     content = types.Content(
         role="user",
         parts=[types.Part(text=query)]
     )
-    
+
     final_response = "No response"
-    
+
     async for event in runner.run_async(
         user_id=USER_ID,
         session_id=SESSION_ID,
@@ -1785,7 +1785,7 @@ async def call_file_system_agent(message: dict):
             elif event.actions and event.actions.escalate:
                 final_response = f"Agent escalated: {event.error_message}"
             break
-    
+
     logger.info(f"<<< Agent Response: {final_response}")
     return final_response
 
@@ -1807,7 +1807,7 @@ async def main():
                 ),
             )
         )
-        
+
         # Start OmniDaemon
         logger.info("Starting OmniDaemon...")
     await sdk.start()
@@ -1826,11 +1826,11 @@ async def main():
             await asyncio.sleep(1)
         except (KeyboardInterrupt, asyncio.CancelledError):
             logger.info("Received shutdown signal...")
-    
+
     except Exception as e:
         logger.error(f"Error: {e}", exc_info=True)
         raise
-    
+
     finally:
         logger.info("Shutting down...")
         await sdk.shutdown()
@@ -1870,7 +1870,7 @@ sdk = OmniDaemonSDK()
 
 async def publish_tasks():
     """Publish tasks to agent topics."""
-    
+
     # Task payload
     payload = {
         "content": """
@@ -1881,7 +1881,7 @@ async def publish_tasks():
         Read file1.txt to verify content.
         """,
     }
-    
+
     # Create event envelope
     event = EventEnvelope(
         topic="file_system.tasks",
@@ -1890,14 +1890,14 @@ async def publish_tasks():
             webhook=None,  # Optional: callback URL
         ),
     )
-    
+
     # Publish to event bus
     task_id = await sdk.publish_task(event_envelope=event)
     print(f"📨 Published task: {task_id}")
-    
+
     # Wait a bit for processing
     await asyncio.sleep(5)
-    
+
     # Retrieve result
         result = await sdk.get_result(task_id)
     print(f"✅ Result: {result}")
@@ -1932,14 +1932,14 @@ Process requests for different tenants with isolated configs:
 async def multi_tenant_agent(message: dict):
     tenant_id = message.get("tenant_id")
     content = message.get("content", {})
-    
+
     # Load tenant-specific config
     config = await get_tenant_config(tenant_id)
-    
+
     # Process with your AI agent
     # (Replace with your actual agent's run method)
     result = await process_with_agent(content, config)
-    
+
     return {
         "status": "success",
         "data": result,
@@ -2023,7 +2023,7 @@ Route by source for different processing logic:
 async def priority_agent(message: dict):
     source = message.get("source")
     content = message.get("content", {})
-    
+
     # Different logic per source
     if source == "premium-user":
         # Premium users get faster processing
@@ -2035,11 +2035,11 @@ async def priority_agent(message: dict):
     else:
         priority = "low"
         timeout = 120
-    
+
     # Process with your AI agent (adapt to your agent's API)
     # See examples/omnicoreagent/agent_runner.py for real implementation
     result = await process_with_agent(content, priority=priority, timeout=timeout)
-    
+
     return {"status": "success", "data": result, "source": source}
 ```
 
@@ -2053,10 +2053,10 @@ Notify your API when long task completes:
 # Your agent runner (long-running AI task)
 async def analyze_video(message: dict):
     video_url = message.get("content", {}).get("url")
-    
+
     # Long-running AI processing (30 seconds+)
     analysis = await ai_agent.analyze_video(video_url)
-    
+
     return {"analysis": analysis}
 
 # Publisher (with webhook)
@@ -2083,26 +2083,26 @@ Maintain context across multiple messages:
 async def conversational_agent(message: dict):
     correlation_id = message.get("correlation_id")
     content = message.get("content", {})
-    
+
     # Load conversation history
     if correlation_id:
         context = await db.get_conversation(correlation_id)
     else:
         context = []
-    
+
     # Add user message
     user_text = content.get("text")
     context.append({"role": "user", "content": user_text})
-    
+
     # Process with your AI agent (adapt to your agent's API)
     # For OmniCore: await agent.run(user_text)
     # For Google ADK: runner.run_async(user_id, session_id, new_message)
     response = await process_with_agent(user_text, context=context)
-    
+
     # Save updated context
     context.append({"role": "assistant", "content": response})
     await db.save_conversation(correlation_id, context)
-    
+
     return {"reply": response, "correlation_id": correlation_id}
 ```
 
@@ -2116,7 +2116,7 @@ Handle retries intelligently:
 async def smart_retry_agent(message: dict):
     content = message.get("content", {})
     retry_count = content.get("_retry_count", 0)
-    
+
     try:
         # Process with your AI agent
         result = await process_with_agent(content)
@@ -3130,22 +3130,22 @@ omnidaemon agent list
   - [ ] Kafka integration
   - [ ] RabbitMQ integration
   - [ ] NATS JetStream integration
-  
+
 - [ ] **Storage**
   - [ ] PostgreSQL backend
   - [ ] MongoDB backend
   - [ ] S3 for large results
-  
+
 - [ ] **Observability**
 - [ ] Prometheus metrics exporter
   - [ ] OpenTelemetry tracing
   - [ ] Grafana dashboards
-  
+
 - [ ] **Developer Experience**
 - [ ] Web UI dashboard
   - [ ] VS Code extension
   - [ ] Agent templates/scaffolding
-  
+
 - [ ] **Enterprise Features**
   - [ ] Authentication & authorization
   - [ ] Multi-tenancy

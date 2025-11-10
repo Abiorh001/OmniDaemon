@@ -54,7 +54,7 @@ async def fire_and_forget():
             ),
         )
     )
-    
+
     print(f"✅ Event published: {task_id}")
     # Don't wait for result!
     return task_id
@@ -70,14 +70,14 @@ await fire_and_forget()
 async def track_analytics(message: dict):
     """Process analytics event."""
     content = message.get("content", {})
-    
+
     # Store in analytics DB
     await analytics_db.insert({
         "event": content["event"],
         "user_id": content["user_id"],
         "timestamp": time.time(),
     })
-    
+
     # No return needed (fire-and-forget)
     return None
 ```
@@ -117,16 +117,16 @@ async def request_reply(query: str, timeout: int = 30) -> dict:
             ),
         )
     )
-    
+
     # Poll for result with timeout
     start_time = time.time()
     while time.time() - start_time < timeout:
         result = await sdk.get_result(task_id)
         if result is not None:
             return result
-        
+
         await asyncio.sleep(0.5)  # Poll every 500ms
-    
+
     raise TimeoutError(f"No result after {timeout}s")
 
 # Usage
@@ -148,26 +148,26 @@ async def request_reply_backoff(query: str, max_wait: int = 30):
             payload=PayloadBase(content={"query": query}),
         )
     )
-    
+
     delays = [0.1, 0.2, 0.5, 1, 2, 5]  # Exponential backoff
     total_waited = 0
-    
+
     for delay in delays:
         if total_waited >= max_wait:
             raise TimeoutError(f"No result after {max_wait}s")
-        
+
         await asyncio.sleep(delay)
         total_waited += delay
-        
+
         result = await sdk.get_result(task_id)
         if result is not None:
             return result
-    
+
     # Final check
     result = await sdk.get_result(task_id)
     if result is None:
         raise TimeoutError(f"No result after {max_wait}s")
-    
+
     return result
 ```
 
@@ -201,14 +201,14 @@ async def handle_upload(message: dict):
     """Stage 1: Validate and store file."""
     content = message.get("content", {})
     file_data = content["file"]
-    
+
     # Validate
     if not is_valid_file(file_data):
         return {"status": "invalid"}
-    
+
     # Store
     file_id = await storage.save(file_data)
-    
+
     # Publish to next stage
     correlation_id = message.get("correlation_id")
     await sdk.publish_task(
@@ -221,7 +221,7 @@ async def handle_upload(message: dict):
             ),
         )
     )
-    
+
     return {"status": "uploaded", "file_id": file_id}
 
 
@@ -230,10 +230,10 @@ async def handle_scan(message: dict):
     """Stage 2: Scan file for viruses."""
     content = message.get("content", {})
     file_id = content["file_id"]
-    
+
     # Scan
     scan_result = await virus_scanner.scan(file_id)
-    
+
     if scan_result.is_clean:
         # Publish to next stage
         correlation_id = message.get("correlation_id")
@@ -267,10 +267,10 @@ async def handle_process(message: dict):
     """Stage 3: Process file."""
     content = message.get("content", {})
     file_id = content["file_id"]
-    
+
     # Process
     result = await processor.process(file_id)
-    
+
     # Publish to final stage
     correlation_id = message.get("correlation_id")
     await sdk.publish_task(
@@ -283,7 +283,7 @@ async def handle_process(message: dict):
             ),
         )
     )
-    
+
     return {"status": "processed", "result": result}
 
 
@@ -291,14 +291,14 @@ async def handle_process(message: dict):
 async def handle_notify(message: dict):
     """Stage 4: Notify user."""
     content = message.get("content", {})
-    
+
     # Notify user
     await notification_service.send({
         "type": "file_processed",
         "file_id": content["file_id"],
         "result": content["result"],
     })
-    
+
     return {"status": "notified"}
 
 
@@ -361,9 +361,9 @@ file.notify (user notification)
 async def fan_out(image_url: str):
     """Send image to multiple processors in parallel."""
     correlation_id = f"batch_{uuid.uuid4()}"
-    
+
     tasks = []
-    
+
     # Task 1: Generate thumbnail
     tasks.append(
         sdk.publish_task(
@@ -376,7 +376,7 @@ async def fan_out(image_url: str):
             )
         )
     )
-    
+
     # Task 2: Detect objects
     tasks.append(
         sdk.publish_task(
@@ -389,7 +389,7 @@ async def fan_out(image_url: str):
             )
         )
     )
-    
+
     # Task 3: Extract text (OCR)
     tasks.append(
         sdk.publish_task(
@@ -402,10 +402,10 @@ async def fan_out(image_url: str):
             )
         )
     )
-    
+
     # Wait for all tasks to be published
     task_ids = await asyncio.gather(*tasks)
-    
+
     return {
         "correlation_id": correlation_id,
         "task_ids": task_ids,
@@ -417,20 +417,20 @@ async def fan_in(correlation_id: str, task_ids: list, timeout: int = 30):
     """Wait for all results and aggregate."""
     start_time = time.time()
     results = {}
-    
+
     while len(results) < len(task_ids):
         if time.time() - start_time > timeout:
             raise TimeoutError("Not all tasks completed")
-        
+
         for task_id in task_ids:
             if task_id not in results:
                 result = await sdk.get_result(task_id)
                 if result is not None:
                     results[task_id] = result
-        
+
         if len(results) < len(task_ids):
             await asyncio.sleep(0.5)
-    
+
     return {
         "correlation_id": correlation_id,
         "results": results,
@@ -441,14 +441,14 @@ async def fan_in(correlation_id: str, task_ids: list, timeout: int = 30):
 async def process_image_parallel(image_url: str):
     # Fan-out
     batch = await fan_out(image_url)
-    
+
     # Fan-in
     aggregated = await fan_in(
         batch["correlation_id"],
         batch["task_ids"],
         timeout=30
     )
-    
+
     return aggregated
 ```
 
@@ -458,7 +458,7 @@ async def process_image_parallel(image_url: str):
 async def fan_out_fan_in(image_url: str):
     """Fan-out and fan-in in one function."""
     correlation_id = f"batch_{uuid.uuid4()}"
-    
+
     # Publish all tasks
     task_ids = await asyncio.gather(
         sdk.publish_task(
@@ -483,7 +483,7 @@ async def fan_out_fan_in(image_url: str):
             )
         ),
     )
-    
+
     # Wait for all results (with timeout)
     async def get_result_with_retry(task_id, retries=60):
         for _ in range(retries):
@@ -492,11 +492,11 @@ async def fan_out_fan_in(image_url: str):
                 return result
             await asyncio.sleep(0.5)
         return None
-    
+
     results = await asyncio.gather(
         *[get_result_with_retry(tid) for tid in task_ids]
     )
-    
+
     return {
         "thumbnail": results[0],
         "detections": results[1],
@@ -533,37 +533,37 @@ async def inspect_and_handle_dlq(topic: str):
     """Inspect DLQ and handle failed messages."""
     # Get DLQ entries
     dlq_entries = await sdk.inspect_dlq(topic, limit=100)
-    
+
     print(f"📋 Found {len(dlq_entries)} DLQ entries for {topic}")
-    
+
     for entry in dlq_entries:
         data = entry["data"]
         original_message = data["failed_message"]
         error = data["error"]
         retry_count = data["retry_count"]
-        
+
         print(f"\n❌ Failed Message:")
         print(f"   Error: {error}")
         print(f"   Retries: {retry_count}")
         print(f"   Content: {original_message.get('content')}")
-        
+
         # Analyze failure type
         if "KeyError" in error:
             # Missing field - fix data and republish
             print("   → Missing field, fixing...")
             fixed_content = fix_missing_fields(original_message["content"])
             await republish_message(topic, fixed_content)
-        
+
         elif "ConnectionError" in error:
             # Transient error - republish
             print("   → Transient error, republishing...")
             await republish_message(topic, original_message["content"])
-        
+
         elif "ValueError" in error:
             # Bad data - log and skip
             print("   → Bad data, logging to dead_letter.log")
             log_to_dead_letter(original_message)
-        
+
         else:
             # Unknown - manual review needed
             print("   → Unknown error, needs manual review")
@@ -584,11 +584,11 @@ async def republish_message(topic: str, content: dict):
 async def dlq_monitor():
     """Monitor DLQ continuously."""
     topics = ["file.upload", "analysis.tasks", "notifications"]
-    
+
     while True:
         for topic in topics:
             await inspect_and_handle_dlq(topic)
-        
+
         # Check every 5 minutes
         await asyncio.sleep(300)
 ```
@@ -599,19 +599,19 @@ async def dlq_monitor():
 async def auto_handle_dlq(topic: str):
     """Automatically handle DLQ based on error type."""
     dlq_entries = await sdk.inspect_dlq(topic, limit=50)
-    
+
     stats = {
         "total": len(dlq_entries),
         "republished": 0,
         "logged": 0,
         "manual": 0,
     }
-    
+
     for entry in dlq_entries:
         data = entry["data"]
         error = data["error"]
         original_message = data["failed_message"]
-        
+
         # Auto-retry transient errors
         transient_errors = [
             "ConnectionError",
@@ -619,23 +619,23 @@ async def auto_handle_dlq(topic: str):
             "503 Service Unavailable",
             "429 Too Many Requests",
         ]
-        
+
         if any(err in error for err in transient_errors):
             # Wait a bit then republish
             await asyncio.sleep(5)
             await republish_message(topic, original_message["content"])
             stats["republished"] += 1
-        
+
         # Log permanent errors
         elif "ValueError" in error or "KeyError" in error:
             log_to_dead_letter(original_message, error)
             stats["logged"] += 1
-        
+
         # Manual review
         else:
             send_alert(f"DLQ entry needs manual review: {entry['id']}")
             stats["manual"] += 1
-    
+
     return stats
 ```
 
@@ -670,14 +670,14 @@ async def process_order_saga(order_data: dict):
     1. Reserve inventory
     2. Charge payment
     3. Create shipment
-    
+
     If any step fails, compensate previous steps.
     """
     saga_id = f"saga_{uuid.uuid4()}"
     correlation_id = f"order_{order_data['order_id']}"
-    
+
     compensations = []  # Track what to undo
-    
+
     try:
         # Step 1: Reserve inventory
         inventory_result = await execute_saga_step(
@@ -686,15 +686,15 @@ async def process_order_saga(order_data: dict):
             causation_id=saga_id,
             content={"items": order_data["items"]},
         )
-        
+
         if not inventory_result.get("success"):
             raise SagaFailure("Inventory reservation failed")
-        
+
         compensations.append({
             "topic": "inventory.release",
             "content": {"reservation_id": inventory_result["reservation_id"]},
         })
-        
+
         # Step 2: Charge payment
         payment_result = await execute_saga_step(
             topic="payment.charge",
@@ -705,15 +705,15 @@ async def process_order_saga(order_data: dict):
                 "customer_id": order_data["customer_id"],
             },
         )
-        
+
         if not payment_result.get("success"):
             raise SagaFailure("Payment failed")
-        
+
         compensations.append({
             "topic": "payment.refund",
             "content": {"transaction_id": payment_result["transaction_id"]},
         })
-        
+
         # Step 3: Create shipment
         shipment_result = await execute_saga_step(
             topic="shipment.create",
@@ -724,10 +724,10 @@ async def process_order_saga(order_data: dict):
                 "address": order_data["shipping_address"],
             },
         )
-        
+
         if not shipment_result.get("success"):
             raise SagaFailure("Shipment creation failed")
-        
+
         # SUCCESS! All steps completed
         return {
             "status": "completed",
@@ -736,12 +736,12 @@ async def process_order_saga(order_data: dict):
             "payment": payment_result,
             "shipment": shipment_result,
         }
-    
+
     except SagaFailure as e:
         # FAILURE! Compensate all completed steps
         print(f"❌ Saga failed: {e}")
         await compensate_saga(compensations, correlation_id)
-        
+
         return {
             "status": "failed",
             "saga_id": saga_id,
@@ -760,21 +760,21 @@ async def execute_saga_step(topic: str, correlation_id: str, causation_id: str, 
             payload=PayloadBase(content=content),
         )
     )
-    
+
     # Wait for result (with timeout)
     for _ in range(60):  # 30 seconds
         result = await sdk.get_result(task_id)
         if result is not None:
             return result
         await asyncio.sleep(0.5)
-    
+
     raise TimeoutError(f"Step {topic} timed out")
 
 
 async def compensate_saga(compensations: list, correlation_id: str):
     """Execute compensation steps in reverse order."""
     print(f"🔄 Compensating {len(compensations)} steps...")
-    
+
     for compensation in reversed(compensations):
         try:
             await sdk.publish_task(
@@ -825,20 +825,20 @@ async def process_with_tenant_routing(message: dict):
     """Route processing based on tenant."""
     tenant_id = message.get("tenant_id")
     content = message.get("content", {})
-    
+
     if not tenant_id:
         return {"error": "Missing tenant_id"}
-    
+
     # Load tenant-specific configuration
     tenant_config = await get_tenant_config(tenant_id)
-    
+
     if not tenant_config:
         return {"error": f"Unknown tenant: {tenant_id}"}
-    
+
     # Check tenant limits
     if not await check_tenant_limits(tenant_id):
         return {"error": "Tenant limit exceeded"}
-    
+
     # Process with tenant context
     try:
         result = await process_for_tenant(
@@ -846,16 +846,16 @@ async def process_with_tenant_routing(message: dict):
             tenant_id,
             tenant_config
         )
-        
+
         # Track usage
         await track_tenant_usage(tenant_id, {
             "operation": "process",
             "tokens_used": result.get("tokens", 0),
             "timestamp": time.time(),
         })
-        
+
         return result
-    
+
     except Exception as e:
         # Log with tenant context
         logger.error(f"[Tenant {tenant_id}] Processing failed: {e}")
@@ -866,7 +866,7 @@ async def get_tenant_config(tenant_id: str) -> dict:
     """Load tenant-specific configuration."""
     # From database or cache
     config = await config_db.get(f"tenant:{tenant_id}")
-    
+
     return {
         "model": config.get("ai_model", "gpt-4o"),
         "max_tokens": config.get("max_tokens", 1000),
@@ -879,7 +879,7 @@ async def check_tenant_limits(tenant_id: str) -> bool:
     """Check if tenant has capacity."""
     usage = await usage_db.get(f"usage:{tenant_id}:today")
     config = await get_tenant_config(tenant_id)
-    
+
     return usage < config["rate_limit"]
 
 
@@ -943,7 +943,7 @@ async def publish_with_webhook(data: dict, webhook_url: str):
             ),
         )
     )
-    
+
     return {"task_id": task_id, "webhook": webhook_url}
 
 
@@ -952,10 +952,10 @@ async def process_with_webhook(message: dict):
     """Process and POST result to webhook."""
     content = message.get("content", {})
     webhook = message.get("webhook")
-    
+
     # Process
     result = await process_document(content)
-    
+
     # If webhook provided, POST result
     if webhook:
         try:
@@ -971,16 +971,16 @@ async def process_with_webhook(message: dict):
                     },
                     timeout=10,
                 )
-                
+
                 if response.status_code == 200:
                     print(f"✅ Webhook delivered: {webhook}")
                 else:
                     print(f"❌ Webhook failed: {response.status_code}")
-        
+
         except Exception as e:
             print(f"❌ Webhook error: {e}")
             # Don't fail task if webhook fails
-    
+
     return result
 ```
 
@@ -997,26 +997,26 @@ async def post_to_webhook_with_retry(webhook_url: str, data: dict, retries: int 
                     json=data,
                     timeout=10,
                 )
-                
+
                 if response.status_code in [200, 201, 202]:
                     return True
-                
+
                 if response.status_code >= 500:
                     # Server error - retry
                     if attempt < retries - 1:
                         await asyncio.sleep(2 ** attempt)  # Exponential backoff
                         continue
-                
+
                 # Client error - don't retry
                 return False
-        
+
         except Exception as e:
             if attempt < retries - 1:
                 await asyncio.sleep(2 ** attempt)
                 continue
-            
+
             return False
-    
+
     return False
 ```
 
@@ -1053,18 +1053,18 @@ async def replay_events(
 ):
     """Replay events from stream."""
     print(f"🔄 Replaying {topic} from {start_date} to {end_date}")
-    
+
     # Get messages from stream
     messages = await sdk.inspect_stream(topic, limit=10000)
-    
+
     replayed = 0
     skipped = 0
-    
+
     for msg in messages:
         # Filter by date
         created_at = msg["data"].get("created_at", 0)
         msg_date = datetime.fromtimestamp(created_at)
-        
+
         if start_date <= msg_date <= end_date:
             if dry_run:
                 print(f"   [DRY RUN] Would replay: {msg['id']}")
@@ -1084,7 +1084,7 @@ async def replay_events(
                 print(f"   ✅ Replayed: {msg['id']}")
         else:
             skipped += 1
-    
+
     print(f"\n📊 Summary:")
     print(f"   Replayed: {replayed}")
     print(f"   Skipped: {skipped}")
@@ -1127,7 +1127,7 @@ await replay_events(
 ```python
 class CircuitBreaker:
     """Circuit breaker for external service calls."""
-    
+
     def __init__(
         self,
         failure_threshold: int = 5,
@@ -1137,11 +1137,11 @@ class CircuitBreaker:
         self.failure_threshold = failure_threshold
         self.timeout_duration = timeout_duration
         self.expected_exception = expected_exception
-        
+
         self.failure_count = 0
         self.last_failure_time = None
         self.state = "CLOSED"  # CLOSED, OPEN, HALF_OPEN
-    
+
     async def call(self, func, *args, **kwargs):
         """Execute function with circuit breaker."""
         if self.state == "OPEN":
@@ -1150,25 +1150,25 @@ class CircuitBreaker:
                 self.state = "HALF_OPEN"
             else:
                 raise CircuitBreakerOpen("Circuit breaker is OPEN")
-        
+
         try:
             result = await func(*args, **kwargs)
-            
+
             # Success - reset
             if self.state == "HALF_OPEN":
                 self.state = "CLOSED"
                 self.failure_count = 0
-            
+
             return result
-        
+
         except self.expected_exception as e:
             self.failure_count += 1
             self.last_failure_time = time.time()
-            
+
             if self.failure_count >= self.failure_threshold:
                 self.state = "OPEN"
                 print(f"❌ Circuit breaker OPENED after {self.failure_count} failures")
-            
+
             raise
 
 
@@ -1199,14 +1199,14 @@ async def call_external_api(data: dict):
 async def process_with_circuit_breaker(message: dict):
     """Process with circuit breaker protection."""
     content = message.get("content", {})
-    
+
     try:
         result = await external_api_breaker.call(
             call_external_api,
             content
         )
         return {"status": "success", "result": result}
-    
+
     except CircuitBreakerOpen:
         # Circuit breaker open - fast fail
         print("⚠️ Circuit breaker OPEN, skipping external API call")
@@ -1214,7 +1214,7 @@ async def process_with_circuit_breaker(message: dict):
             "status": "skipped",
             "reason": "circuit_breaker_open",
         }
-    
+
     except Exception as e:
         # Other error
         print(f"❌ External API error: {e}")
@@ -1270,4 +1270,3 @@ async def process_with_circuit_breaker(message: dict):
 - Circuit Breaker: External service calls
 
 These patterns cover 90% of production use cases! 🚀✨
-

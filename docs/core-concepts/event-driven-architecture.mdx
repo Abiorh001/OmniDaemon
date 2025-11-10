@@ -493,7 +493,7 @@ await sdk.publish_task(
 # Agent processes and replies
 async def analyze(message: dict):
     result = await process(message)
-    
+
     # Publish result to reply_to topic
     await sdk.publish_task(
         event_envelope=EventEnvelope(
@@ -545,7 +545,7 @@ async def handle_upload(file):
     """User uploads document"""
     # Save file
     file_path = save_file(file)
-    
+
     # Publish event (fire and forget!)
     await sdk.publish_task(
         event_envelope=EventEnvelope(
@@ -559,7 +559,7 @@ async def handle_upload(file):
             )
         )
     )
-    
+
     return {"status": "uploaded", "message": "Processing started"}
 
 # ============================================
@@ -569,7 +569,7 @@ async def extract_text(message: dict):
     """Extract text from document"""
     file_path = message["content"]["file_path"]
     text = await pdf_to_text(file_path)
-    
+
     # Publish extracted text
     await sdk.publish_task(
         event_envelope=EventEnvelope(
@@ -597,7 +597,7 @@ async def analyze_sentiment(message: dict):
     """Analyze sentiment of text"""
     text = message["content"]["text"]
     sentiment = await ai_analyze_sentiment(text)
-    
+
     # Publish analysis result
     await sdk.publish_task(
         event_envelope=EventEnvelope(
@@ -698,17 +698,17 @@ Agents may receive the same message twice (network issues, retries):
 ```python
 async def process_payment(message: dict):
     payment_id = message["content"]["payment_id"]
-    
+
     # Check if already processed
     if await is_processed(payment_id):
         return {"status": "already_processed"}
-    
+
     # Process
     result = await charge_card(...)
-    
+
     # Mark as processed
     await mark_processed(payment_id)
-    
+
     return result
 ```
 
@@ -720,12 +720,12 @@ async def my_agent(message: dict):
         # Process
         result = await process(message)
         return {"status": "success", "result": result}
-    
+
     except TemporaryError as e:
         # Retriable (network, rate limit)
         logger.warning(f"Temporary failure: {e}")
         raise  # Will retry automatically
-    
+
     except PermanentError as e:
         # Not retriable (invalid data)
         logger.error(f"Permanent failure: {e}")
@@ -764,4 +764,3 @@ omnidaemon bus stats
 - ["The Future of AI Agents is Event-Driven" by Sean Falconer](https://seanfalconer.medium.com/the-future-of-ai-agents-is-event-driven-9e25124060d6)
 - [Redis Streams Documentation](https://redis.io/docs/manual/data-types/streams/)
 - [Event-Driven Architecture (Wikipedia)](https://en.wikipedia.org/wiki/Event-driven_architecture)
-

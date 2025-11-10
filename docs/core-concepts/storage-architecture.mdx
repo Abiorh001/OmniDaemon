@@ -10,8 +10,8 @@ OmniDaemon stores four types of data:
 
 ### 1. Agent Registry
 
-**What:** Metadata about registered agents  
-**Lifetime:** Persistent (until explicitly deleted)  
+**What:** Metadata about registered agents
+**Lifetime:** Persistent (until explicitly deleted)
 **Purpose:** Track which agents are registered, their configuration, and subscription details
 
 **Data Structure:**
@@ -33,8 +33,8 @@ OmniDaemon stores four types of data:
 
 ### 2. Task Results
 
-**What:** Outputs from agent callbacks  
-**Lifetime:** 24 hours (configurable TTL)  
+**What:** Outputs from agent callbacks
+**Lifetime:** 24 hours (configurable TTL)
 **Purpose:** Store results for retrieval by publishers or other systems
 
 **Data Structure:**
@@ -57,8 +57,8 @@ OmniDaemon stores four types of data:
 
 ### 3. Metrics
 
-**What:** Performance and operational metrics  
-**Lifetime:** Configurable (default: unlimited, up to 100K entries)  
+**What:** Performance and operational metrics
+**Lifetime:** Configurable (default: unlimited, up to 100K entries)
 **Purpose:** Track agent performance, debug issues, analyze trends
 
 **Data Structure:**
@@ -82,8 +82,8 @@ OmniDaemon stores four types of data:
 
 ### 4. Configuration
 
-**What:** System configuration and state  
-**Lifetime:** Persistent  
+**What:** System configuration and state
+**Lifetime:** Persistent
 **Purpose:** Store runtime settings, start time, runner ID, custom settings
 
 **Data Structure:**
@@ -233,7 +233,7 @@ class JSONStore:
         self._results: Dict[str, Dict[str, Any]] = {}
         self._metrics: List[Dict[str, Any]] = []
         self._config: Dict[str, Any] = {}
-        
+
         # Thread safety
         self._lock = RLock()
 ```
@@ -246,7 +246,7 @@ def _save_agents(self):
     tmp_file = self.agents_file.with_suffix(".tmp")
     with open(tmp_file, "w", encoding="utf-8") as f:
         json.dump(self._agents, f, indent=2, default=str)
-    
+
     # Atomic rename (OS-level atomicity)
     os.replace(tmp_file, self.agents_file)
 ```
@@ -256,7 +256,7 @@ def _save_agents(self):
 async def connect(self):
     if self._connected:
         return
-    
+
     with self._lock:
         self._load_agents()      # Load agents.json
         self._load_results()     # Load results.json
@@ -313,19 +313,19 @@ async def close(self):
 async def add_agent(self, topic: str, agent_data: Dict[str, Any]):
     with self._lock:
         agent_name = agent_data.get("name")
-        
+
         if topic not in self._agents:
             self._agents[topic] = []
-        
+
         # Remove old (if exists)
         self._agents[topic] = [
             a for a in self._agents[topic]
             if a.get("name") != agent_name
         ]
-        
+
         # Add new
         self._agents[topic].append(agent_data)
-        
+
         # Save immediately
         self._save_agents()
 ```
@@ -366,20 +366,20 @@ async def save_result(self, task_id: str, result: Dict, ttl_seconds: Optional[in
             "result": result,
             "saved_at": time.time(),
         }
-        
+
         if ttl_seconds:
             result_data["expires_at"] = time.time() + ttl_seconds
-        
+
         self._results[task_id] = result_data
         self._save_results()
 
 async def get_result(self, task_id: str):
     with self._lock:
         result_data = self._results.get(task_id)
-        
+
         if not result_data:
             return None
-        
+
         # Check TTL expiration
         expires_at = result_data.get("expires_at")
         if expires_at and time.time() > expires_at:
@@ -387,7 +387,7 @@ async def get_result(self, task_id: str):
             del self._results[task_id]
             self._save_results()
             return None
-        
+
         return result_data.get("result")
 ```
 
@@ -422,20 +422,20 @@ async def save_metric(self, metric_data: Dict[str, Any]):
     with self._lock:
         metric_data["saved_at"] = time.time()
         self._metrics.append(metric_data)
-        
+
         # Keep only last 10K metrics
         if len(self._metrics) > 10_000:
             self._metrics = self._metrics[-10_000:]
-        
+
         self._save_metrics()
 
 async def get_metrics(self, topic: Optional[str] = None, limit: int = 1000):
     with self._lock:
         metrics = list(reversed(self._metrics))  # Most recent first
-        
+
         if topic:
             metrics = [m for m in metrics if m.get("topic") == topic]
-        
+
         return metrics[:limit]
 ```
 
@@ -597,7 +597,7 @@ created_at: "1678901234.567"
 async def add_agent(self, topic: str, agent_data: Dict[str, Any]):
     agent_name = agent_data.get("name")
     agent_key = self._key("agent", topic, agent_name)
-    
+
     # Flatten agent data
     agent_flat = {
         "name": agent_name,
@@ -608,18 +608,18 @@ async def add_agent(self, topic: str, agent_data: Dict[str, Any]):
         "topic": topic,
         "created_at": time.time(),
     }
-    
+
     # Atomic pipeline (all or nothing)
     async with self._redis.pipeline(transaction=True) as pipe:
         # Set agent data
         await pipe.hset(agent_key, mapping=agent_flat)
-        
+
         # Add to topic index
         await pipe.sadd(self._key("agents", "topic", topic), agent_name)
-        
+
         # Add topic to global set
         await pipe.sadd(self._key("topics"), topic)
-        
+
         # Execute atomically
         await pipe.execute()
 ```
@@ -629,10 +629,10 @@ async def add_agent(self, topic: str, agent_data: Dict[str, Any]):
 async def get_agent(self, topic: str, agent_name: str):
     agent_key = self._key("agent", topic, agent_name)
     data = await self._redis.hgetall(agent_key)
-    
+
     if not data:
         return None
-    
+
     # Reconstruct agent
     return {
         "name": data.get("name"),
@@ -652,14 +652,14 @@ async def get_agents_by_topic(self, topic: str):
     agent_names = await self._redis.smembers(
         self._key("agents", "topic", topic)
     )
-    
+
     # Fetch each agent
     agents = []
     for agent_name in agent_names:
         agent = await self.get_agent(topic, agent_name)
         if agent:
             agents.append(agent)
-    
+
     return agents
 ```
 
@@ -667,19 +667,19 @@ async def get_agents_by_topic(self, topic: str):
 ```python
 async def delete_agent(self, topic: str, agent_name: str):
     agent_key = self._key("agent", topic, agent_name)
-    
+
     async with self._redis.pipeline(transaction=True) as pipe:
         # Delete agent data
         await pipe.delete(agent_key)
-        
+
         # Remove from topic index
         await pipe.srem(
             self._key("agents", "topic", topic),
             agent_name
         )
-        
+
         await pipe.execute()
-    
+
     # If no more agents for topic, clean up
     count = await self._redis.scard(self._key("agents", "topic", topic))
     if count == 0:
@@ -701,21 +701,21 @@ omni:results:index           # Sorted set (task_id → timestamp)
 ```python
 async def save_result(self, task_id: str, result: Dict, ttl_seconds: Optional[int]):
     result_key = self._key("result", task_id)
-    
+
     result_data = {
         "task_id": task_id,
         "result": result,
         "saved_at": time.time(),
     }
-    
+
     result_json = json.dumps(result_data, default=str)
-    
+
     if ttl_seconds:
         # Set with TTL (Redis native expiration!)
         await self._redis.setex(result_key, ttl_seconds, result_json)
     else:
         await self._redis.set(result_key, result_json)
-    
+
     # Add to sorted set (for listing)
     await self._redis.zadd(
         self._key("results", "index"),
@@ -728,12 +728,12 @@ async def save_result(self, task_id: str, result: Dict, ttl_seconds: Optional[in
 async def get_result(self, task_id: str):
     result_key = self._key("result", task_id)
     data = await self._redis.get(result_key)
-    
+
     if not data:
         # Remove from index if missing
         await self._redis.zrem(self._key("results", "index"), task_id)
         return None
-    
+
     result_data = json.loads(data)
     return result_data.get("result")
 ```
@@ -747,7 +747,7 @@ async def list_results(self, limit: int = 100):
         0,              # Start
         limit - 1       # End
     )
-    
+
     # Fetch each result
     results = []
     for task_id in task_ids:
@@ -755,7 +755,7 @@ async def list_results(self, limit: int = 100):
         data = await self._redis.get(result_key)
         if data:
             results.append(json.loads(data))
-    
+
     return results
 ```
 
@@ -777,7 +777,7 @@ omni:metrics:stream
 ```python
 async def save_metric(self, metric_data: Dict[str, Any]):
     metric_data["saved_at"] = time.time()
-    
+
     await self._redis.xadd(
         self._key("metrics", "stream"),
         {"data": json.dumps(metric_data, default=str)},
@@ -794,18 +794,18 @@ async def get_metrics(self, topic: Optional[str] = None, limit: int = 1000):
         self._key("metrics", "stream"),
         count=limit
     )
-    
+
     metrics = []
     for entry_id, fields in entries:
         metric = json.loads(fields.get("data", "{}"))
-        
+
         # Filter by topic if specified
         if topic and metric.get("topic") != topic:
             continue
-        
+
         metric["stream_id"] = entry_id
         metrics.append(metric)
-    
+
     return metrics
 ```
 
@@ -825,10 +825,10 @@ async def save_config(self, key: str, value: Any):
 async def get_config(self, key: str, default: Any = None):
     config_key = self._key("config", key)
     data = await self._redis.get(config_key)
-    
+
     if data is None:
         return default
-    
+
     try:
         return json.loads(data)
     except json.JSONDecodeError:
@@ -844,10 +844,10 @@ async def health_check(self):
         start = time.time()
         await self._redis.ping()
         latency = (time.time() - start) * 1000  # ms
-        
+
         # Get Redis stats
         info = await self._redis.info()
-        
+
         return {
             "status": "healthy",
             "backend": "redis",
@@ -1218,4 +1218,3 @@ S3_REGION=us-east-1
 - Backup regularly
 
 Storage is the foundation of OmniDaemon's persistence layer! 💾✨
-

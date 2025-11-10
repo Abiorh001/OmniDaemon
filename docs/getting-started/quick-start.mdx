@@ -123,10 +123,10 @@ sdk = OmniDaemonSDK()
 async def greeter(message: dict):
     """
     This is YOUR callback - where your logic/AI agent executes.
-    
+
     For this simple example, we just return a greeting.
     In real apps, this is where you'd call your AI agent.
-    
+
     See real examples:
     - examples/omnicoreagent/agent_runner.py (OmniCore)
     - examples/google_adk/agent_runner.py (Google ADK)
@@ -143,10 +143,10 @@ async def main():
             callback=greeter,         # REQUIRED: Your function (where AI agent runs)
         )
     )
-    
+
     await sdk.start()
     print("🎧 Agent running. Press Ctrl+C to stop.")
-    
+
     try:
         while True:
             await asyncio.sleep(1)
@@ -190,10 +190,10 @@ async def main():
             )
         )
     )
-    
+
     await sdk.start()
     print("🎧 Agent running. Press Ctrl+C to stop.")
-    
+
     try:
         while True:
             await asyncio.sleep(1)
@@ -267,10 +267,10 @@ async def main():
             content={"name": "Alice"}     # REQUIRED
         ),
     )
-    
+
     task_id = await sdk.publish_task(event_envelope=event)
     print(f"📨 Task ID: {task_id}")
-    
+
     # Wait and get result
     await asyncio.sleep(2)
     result = await sdk.get_result(task_id)
@@ -301,12 +301,12 @@ async def main():
             tenant_id="tenant-abc",              # Optional: Multi-tenancy
         ),
     )
-    
+
     task_id = await sdk.publish_task(event_envelope=event)
     print(f"📨 Task ID: {task_id}")
     print(f"   Correlation ID: {event.payload.correlation_id}")
     print(f"   Source: {event.payload.source}")
-    
+
     # Results auto-expire after 24 hours
     await asyncio.sleep(2)
     result = await sdk.get_result(task_id)
@@ -536,4 +536,3 @@ Congratulations! You've built your first AI agent with OmniDaemon. Here's where 
 ---
 
 Happy building! 🎉
-

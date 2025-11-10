@@ -256,24 +256,24 @@ while self._running:
         count=10,                                      # Batch size
         block=5000,                                    # Block timeout (ms)
     )
-    
+
     if not entries:
         continue  # No messages, loop again
-    
+
     for stream_name, msgs in entries:
         for msg_id, fields in msgs:
             payload = json.loads(fields["data"])
-            
+
             # Mark in-flight (prevent duplicate processing)
             self._in_flight[group_name].add(msg_id)
-            
+
             try:
                 # Call agent callback
                 await callback(payload)
-                
+
                 # Acknowledge successful processing
                 await redis.xack(stream_name, group_name, msg_id)
-                
+
                 # Emit metric
                 await self._emit_monitor({
                     "topic": topic,
@@ -281,11 +281,11 @@ while self._running:
                     "msg_id": msg_id,
                     "timestamp": time.time(),
                 })
-            
+
             except Exception as e:
                 # Leave in pending list for reclaiming
                 logger.exception(f"Callback error: {e}")
-            
+
             finally:
                 # Remove from in-flight
                 self._in_flight[group_name].discard(msg_id)
@@ -360,19 +360,19 @@ while self._running:
     pending = await redis.xpending_range(
         stream_name, group_name, "-", "+", count=50
     )
-    
+
     for entry in pending:
         msg_id = entry.get("message_id")
         idle = entry.get("time_since_delivered", 0)  # Milliseconds
-        
+
         # Skip if not idle long enough
         if idle < reclaim_idle_ms:  # Default: 180,000 ms (3 min)
             continue
-        
+
         # Skip if still being processed
         if msg_id in self._in_flight[group_name]:
             continue
-        
+
         # Reclaim message
         claimed = await redis.xclaim(
             name=stream_name,
@@ -381,17 +381,17 @@ while self._running:
             min_idle_time=reclaim_idle_ms,
             message_ids=[msg_id],
         )
-        
+
         if not claimed:
             continue
-        
+
         # Track retry count
         retry_count = await redis.hincrby(
             f"retry_counts:{group_name}",
             msg_id,
             1  # Increment
         )
-        
+
         # Check if exceeded max retries
         if retry_count > dlq_retry_limit:  # Default: 3
             # Send to Dead Letter Queue
@@ -407,7 +407,7 @@ while self._running:
             except Exception:
                 # Will be reclaimed again
                 logger.exception("Retry failed")
-    
+
     await asyncio.sleep(reclaim_interval)  # Default: 30 seconds
 ```
 
@@ -480,7 +480,7 @@ async def _send_to_dlq(
         "retry_count": retry_count,
         "failed_at": time.time(),
     }
-    
+
     await self._redis.xadd(
         dlq_stream,
         {"data": json.dumps(dlq_payload)},
@@ -512,10 +512,10 @@ redis-cli XREVRANGE omni-dlq:group:file.uploaded:file-processor + - COUNT 10
 try:
     # Process message
     await callback(payload)
-    
+
     # Success! Acknowledge
     await redis.xack(stream_name, group_name, msg_id)
-    
+
 except RetriableError:
     # DON'T acknowledge - leave in PEL for reclaiming
     logger.warning("Retriable error, will retry")
@@ -1054,4 +1054,3 @@ consumer_count=10
 - Memory: ~1KB per message
 
 Redis Streams provides a robust, scalable foundation for OmniDaemon's event-driven architecture! 🚀
-

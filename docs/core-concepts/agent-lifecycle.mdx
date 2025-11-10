@@ -65,9 +65,9 @@ async def main():
             callback=my_agent,
         )
     )
-    
+
     await sdk.start()
-    
+
     try:
         while True:
             await asyncio.sleep(1)
@@ -116,13 +116,13 @@ await sdk.register_agent(
         # REQUIRED
         topic="file.uploaded",           # Topic to listen to
         callback=my_agent,                # Function to call
-        
+
         # OPTIONAL
         name="file-processor",            # Default: auto-generated from topic
         description="Processes uploads",  # Default: None
         version="1.0.0",                  # Default: "1.0.0"
         tags=["file", "upload"],          # Default: []
-        
+
         # SUBSCRIPTION CONFIG (Optional)
         config=SubscriptionConfig(
             max_retries=3,                # Default: 3
@@ -199,7 +199,7 @@ Once registered and started, your agent is **active** and processing events.
 async def process_file(message: dict):
     """
     This function is called for each event.
-    
+
     message contains the full EventEnvelope:
     - content: Your data
     - correlation_id: Request tracking
@@ -209,14 +209,14 @@ async def process_file(message: dict):
     - reply_to: Response topic
     - etc.
     """
-    
+
     # Extract data
     content = message.get("content", {})
     filename = content.get("filename")
-    
+
     # Your AI agent logic
     result = await ai_process_file(filename)
-    
+
     # Return result
     return {
         "status": "success",
@@ -587,7 +587,7 @@ with open("agents.yaml") as f:
 # Register each agent
 for agent in agents_config["agents"]:
     callback = import_callback(agent["callback_module"])
-    
+
     await sdk.register_agent(
         agent_config=AgentConfig(
             topic=agent["topic"],
@@ -655,7 +655,7 @@ await sdk.register_agent(
 async def main():
     await sdk.register_agent(...)
     await sdk.start()
-    
+
     try:
         while True:
             await asyncio.sleep(1)
@@ -776,4 +776,3 @@ omnidaemon agent delete \
 - `omnidaemon health` - Real-time system status
 - `omnidaemon agent list` - All registered agents
 - `omnidaemon metrics` - Processing statistics
-

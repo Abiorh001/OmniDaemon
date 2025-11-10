@@ -17,7 +17,7 @@ Thanks for your interest in contributing! This guide walks you through everythin
    git checkout -b feature/short-description
    ```
 
-3. **Install dependencies** (requires [uv](https://docs.astral.sh/uv/)):  
+3. **Install dependencies** (requires [uv](https://docs.astral.sh/uv/)):
    ```bash
    uv sync --group dev
    ```
