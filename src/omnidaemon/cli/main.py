@@ -373,17 +373,17 @@ def bus_groups_cmd(
         pending_color = (
             "red"
             if group["pending"] > 50
-            else "yellow"
-            if group["pending"] > 0
-            else "green"
+            else "yellow" if group["pending"] > 0 else "green"
         )
         table.add_row(
             group["name"],
             str(group["consumers"]),
             f"[{pending_color}]{group['pending']}[/]",
-            group["last_delivered_id"][:20] + "..."
-            if len(group["last_delivered_id"]) > 20
-            else group["last_delivered_id"],
+            (
+                group["last_delivered_id"][:20] + "..."
+                if len(group["last_delivered_id"]) > 20
+                else group["last_delivered_id"]
+            ),
         )
 
     console.print(table)
@@ -460,9 +460,7 @@ def bus_stats_cmd(
             pending_color = (
                 "red"
                 if group["pending"] > 50
-                else "yellow"
-                if group["pending"] > 0
-                else "green"
+                else "yellow" if group["pending"] > 0 else "green"
             )
             dlq_color = "red" if group["dlq"] > 0 else "dim"
 
@@ -1502,9 +1500,11 @@ def config_get(
 
     console.print(
         Panel(
-            json.dumps(value, indent=2)
-            if type(value).__name__ in ("dict", "list")
-            else str(value),
+            (
+                json.dumps(value, indent=2)
+                if type(value).__name__ in ("dict", "list")
+                else str(value)
+            ),
             title=f"⚙️  Configuration: {key}",
             border_style="cyan",
         )
