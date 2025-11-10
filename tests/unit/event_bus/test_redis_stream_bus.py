@@ -2,8 +2,11 @@
 
 import pytest
 import asyncio
+import tempfile
+import shutil
 from unittest.mock import AsyncMock, patch
 from omnidaemon.event_bus.redis_stream_bus import RedisStreamEventBus
+from omnidaemon.storage.json_store import JSONStore
 
 
 async def cleanup_bus_tasks(bus: RedisStreamEventBus, group_name: str):
@@ -566,6 +569,27 @@ class TestRedisStreamEventBusSubscribe:
         await cleanup_bus_tasks(bus, "group:test.topic:test-agent")
 
     @pytest.mark.asyncio
+    async def test_subscribe_raises_non_busygroup_error(self):
+        """Test subscribe raises non-BUSYGROUP ResponseError."""
+        bus = RedisStreamEventBus(redis_url="redis://localhost:6379")
+        mock_redis = AsyncMock()
+
+        # Simulate non-BUSYGROUP error
+        from redis.exceptions import ResponseError
+
+        mock_redis.xgroup_create = AsyncMock(side_effect=ResponseError("OTHER_ERROR"))
+        bus._redis = mock_redis
+
+        async def callback(msg):
+            pass
+
+        # Should raise the error
+        with pytest.raises(ResponseError, match="OTHER_ERROR"):
+            await bus.subscribe(
+                topic="test.topic", agent_name="test-agent", callback=callback
+            )
+
+    @pytest.mark.asyncio
     async def test_subscribe_multiple_consumers(self):
         """Test subscribe creates multiple consumers."""
         bus = RedisStreamEventBus(redis_url="redis://localhost:6379")
@@ -753,6 +777,186 @@ class TestRedisStreamEventBusSubscribe:
 
         # Cleanup
         await cleanup_bus_tasks(bus, "group:test.topic:test-agent")
+
+    @pytest.mark.asyncio
+    async def test_subscribe_stores_active_subscription_with_store(self):
+        """Test subscribe stores subscription as active when store is provided."""
+        mock_store = AsyncMock()
+        mock_store.save_config = AsyncMock()
+        bus = RedisStreamEventBus(redis_url="redis://localhost:6379", store=mock_store)
+        mock_redis = AsyncMock()
+        mock_redis.xgroup_create = AsyncMock()
+        bus._redis = mock_redis
+
+        async def callback(msg):
+            pass
+
+        await bus.subscribe(
+            topic="test.topic", agent_name="test-agent", callback=callback
+        )
+
+        # Verify store.save_config was called with correct key and value
+        mock_store.save_config.assert_called_once()
+        call_args = mock_store.save_config.call_args
+        assert call_args[0][0] == "_subscription_active:group:test.topic:test-agent"
+        assert call_args[0][1] is True
+
+        # Cleanup
+        await cleanup_bus_tasks(bus, "group:test.topic:test-agent")
+
+    @pytest.mark.asyncio
+    async def test_subscribe_stores_active_subscription_with_custom_group(self):
+        """Test subscribe stores subscription with custom group name."""
+        mock_store = AsyncMock()
+        mock_store.save_config = AsyncMock()
+        bus = RedisStreamEventBus(redis_url="redis://localhost:6379", store=mock_store)
+        mock_redis = AsyncMock()
+        mock_redis.xgroup_create = AsyncMock()
+        bus._redis = mock_redis
+
+        async def callback(msg):
+            pass
+
+        await bus.subscribe(
+            topic="test.topic",
+            agent_name="test-agent",
+            callback=callback,
+            group_name="custom-group",
+        )
+
+        # Verify store.save_config was called with custom group name
+        mock_store.save_config.assert_called_once()
+        call_args = mock_store.save_config.call_args
+        assert call_args[0][0] == "_subscription_active:custom-group"
+        assert call_args[0][1] is True
+
+        # Cleanup
+        await cleanup_bus_tasks(bus, "custom-group")
+
+    @pytest.mark.asyncio
+    async def test_subscribe_handles_store_error_gracefully(self):
+        """Test subscribe handles store errors gracefully."""
+        mock_store = AsyncMock()
+        mock_store.save_config = AsyncMock(side_effect=Exception("Store error"))
+        bus = RedisStreamEventBus(redis_url="redis://localhost:6379", store=mock_store)
+        mock_redis = AsyncMock()
+        mock_redis.xgroup_create = AsyncMock()
+        bus._redis = mock_redis
+
+        async def callback(msg):
+            pass
+
+        # Should not raise exception, subscription should still succeed
+        await bus.subscribe(
+            topic="test.topic", agent_name="test-agent", callback=callback
+        )
+
+        # Subscription should still be created
+        assert "group:test.topic:test-agent" in bus._consumers
+
+        # Cleanup
+        await cleanup_bus_tasks(bus, "group:test.topic:test-agent")
+
+    @pytest.mark.asyncio
+    async def test_subscribe_works_without_store(self):
+        """Test subscribe works correctly when store is not provided."""
+        bus = RedisStreamEventBus(redis_url="redis://localhost:6379")
+        mock_redis = AsyncMock()
+        mock_redis.xgroup_create = AsyncMock()
+        bus._redis = mock_redis
+
+        async def callback(msg):
+            pass
+
+        # Should work without store
+        await bus.subscribe(
+            topic="test.topic", agent_name="test-agent", callback=callback
+        )
+
+        assert "group:test.topic:test-agent" in bus._consumers
+
+        # Cleanup
+        await cleanup_bus_tasks(bus, "group:test.topic:test-agent")
+
+    @pytest.mark.asyncio
+    async def test_subscribe_integration_with_json_store(self):
+        """Integration test: verify subscription storage works with real JSONStore."""
+        # Create temporary directory for JSON store
+        temp_dir = tempfile.mkdtemp()
+        try:
+            json_store = JSONStore(storage_dir=temp_dir)
+            await json_store.connect()
+
+            bus = RedisStreamEventBus(
+                redis_url="redis://localhost:6379", store=json_store
+            )
+            mock_redis = AsyncMock()
+            mock_redis.xgroup_create = AsyncMock()
+            bus._redis = mock_redis
+
+            async def callback(msg):
+                pass
+
+            group_name = "group:test.topic:test-agent"
+            subscription_key = f"_subscription_active:{group_name}"
+
+            # Verify subscription is not active initially
+            is_active = await json_store.get_config(subscription_key, default=False)
+            assert is_active is False
+
+            # Subscribe
+            await bus.subscribe(
+                topic="test.topic", agent_name="test-agent", callback=callback
+            )
+
+            # Verify subscription is now stored as active
+            is_active = await json_store.get_config(subscription_key, default=False)
+            assert is_active is True
+
+            # Cleanup
+            await cleanup_bus_tasks(bus, group_name)
+            await json_store.close()
+        finally:
+            # Clean up temporary directory
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    @pytest.mark.asyncio
+    async def test_unsubscribe_integration_with_json_store(self):
+        """Integration test: verify unsubscribe marks subscription inactive with real JSONStore."""
+        # Create temporary directory for JSON store
+        temp_dir = tempfile.mkdtemp()
+        try:
+            json_store = JSONStore(storage_dir=temp_dir)
+            await json_store.connect()
+
+            bus = RedisStreamEventBus(
+                redis_url="redis://localhost:6379", store=json_store
+            )
+            mock_redis = AsyncMock()
+            bus._redis = mock_redis
+
+            group_name = "group:test.topic:test-agent"
+            subscription_key = f"_subscription_active:{group_name}"
+
+            # Set subscription as active initially
+            await json_store.save_config(subscription_key, True)
+            is_active = await json_store.get_config(subscription_key, default=False)
+            assert is_active is True
+
+            # Add consumer to bus
+            bus._consumers[group_name] = {"consume_tasks": [], "reclaim_tasks": []}
+
+            # Unsubscribe
+            await bus.unsubscribe("test.topic", "test-agent")
+
+            # Verify subscription is now marked as inactive
+            is_active = await json_store.get_config(subscription_key, default=False)
+            assert is_active is False
+
+            await json_store.close()
+        finally:
+            # Clean up temporary directory
+            shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 class TestRedisStreamEventBusConsumeLoop:
@@ -1424,6 +1628,538 @@ class TestRedisStreamEventBusConsumeLoop:
 
         # Should handle empty results (timeout) gracefully
         assert mock_redis.xreadgroup.called
+
+    @pytest.mark.asyncio
+    async def test_consume_loop_checks_subscription_active_with_store(self):
+        """Test consume loop checks subscription active status from store."""
+        mock_store = AsyncMock()
+        mock_store.get_config = AsyncMock(return_value=True)  # Subscription is active
+        bus = RedisStreamEventBus(redis_url="redis://localhost:6379", store=mock_store)
+        mock_redis = AsyncMock()
+        bus._redis = mock_redis
+        bus._running = True
+
+        call_count = 0
+
+        async def xreadgroup_side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return [
+                    (
+                        "omni-stream:test.topic",
+                        [("1234567890-0", {"data": '{"content": "test"}'})],
+                    )
+                ]
+            bus._running = False
+            return []
+
+        async def callback_with_stop(msg):
+            await asyncio.sleep(0.01)
+            bus._running = False
+
+        mock_redis.xreadgroup = AsyncMock(side_effect=xreadgroup_side_effect)
+        mock_redis.xack = AsyncMock()
+        mock_redis.xadd = AsyncMock()
+
+        group = "group:test.topic:test-agent"
+        consume_task = asyncio.create_task(
+            bus._consume_loop(
+                stream_name="omni-stream:test.topic",
+                topic="test.topic",
+                group=group,
+                consumer="consumer:test-agent-1",
+                callback=callback_with_stop,
+            )
+        )
+
+        # Wait for loop to process
+        await asyncio.sleep(0.1)
+        bus._running = False
+
+        try:
+            await asyncio.wait_for(consume_task, timeout=0.5)
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            consume_task.cancel()
+            try:
+                await consume_task
+            except asyncio.CancelledError:
+                pass
+
+        # Verify store.get_config was called to check subscription status
+        assert mock_store.get_config.called
+        call_args = mock_store.get_config.call_args
+        assert call_args[0][0] == "_subscription_active:group:test.topic:test-agent"
+        # default=False is a keyword argument, not positional
+        assert call_args[1]["default"] is False
+
+    @pytest.mark.asyncio
+    async def test_consume_loop_stops_when_subscription_inactive(self):
+        """Test consume loop stops when subscription is marked inactive."""
+        mock_store = AsyncMock()
+        # First call returns True (active), second call returns False (inactive)
+        call_count = 0
+
+        async def get_config_side_effect(key, default):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return True  # Active initially
+            return False  # Inactive on second check
+
+        mock_store.get_config = AsyncMock(side_effect=get_config_side_effect)
+        bus = RedisStreamEventBus(redis_url="redis://localhost:6379", store=mock_store)
+        mock_redis = AsyncMock()
+        bus._redis = mock_redis
+        bus._running = True
+
+        async def xreadgroup_side_effect(*args, **kwargs):
+            # Return empty to allow loop to check subscription status
+            await asyncio.sleep(0.01)
+            return []
+
+        async def callback(msg):
+            pass
+
+        mock_redis.xreadgroup = AsyncMock(side_effect=xreadgroup_side_effect)
+
+        group = "group:test.topic:test-agent"
+        consume_task = asyncio.create_task(
+            bus._consume_loop(
+                stream_name="omni-stream:test.topic",
+                topic="test.topic",
+                group=group,
+                consumer="consumer:test-agent-1",
+                callback=callback,
+            )
+        )
+
+        # Wait for loop to check subscription status and exit
+        try:
+            await asyncio.wait_for(consume_task, timeout=1.0)
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            bus._running = False
+            consume_task.cancel()
+            try:
+                await consume_task
+            except asyncio.CancelledError:
+                pass
+
+        # Loop should have exited when subscription became inactive
+        assert consume_task.done()
+
+    @pytest.mark.asyncio
+    async def test_consume_loop_handles_store_error_gracefully(self):
+        """Test consume loop handles store errors gracefully."""
+        mock_store = AsyncMock()
+        mock_store.get_config = AsyncMock(side_effect=Exception("Store error"))
+        bus = RedisStreamEventBus(redis_url="redis://localhost:6379", store=mock_store)
+        mock_redis = AsyncMock()
+        bus._redis = mock_redis
+        bus._running = True
+
+        call_count = 0
+
+        async def xreadgroup_side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return [
+                    (
+                        "omni-stream:test.topic",
+                        [("1234567890-0", {"data": '{"content": "test"}'})],
+                    )
+                ]
+            bus._running = False
+            return []
+
+        async def callback_with_stop(msg):
+            await asyncio.sleep(0.01)
+            bus._running = False
+
+        mock_redis.xreadgroup = AsyncMock(side_effect=xreadgroup_side_effect)
+        mock_redis.xack = AsyncMock()
+        mock_redis.xadd = AsyncMock()
+
+        consume_task = asyncio.create_task(
+            bus._consume_loop(
+                stream_name="omni-stream:test.topic",
+                topic="test.topic",
+                group="group:test.topic:test-agent",
+                consumer="consumer:test-agent-1",
+                callback=callback_with_stop,
+            )
+        )
+
+        # Wait for loop to process
+        await asyncio.sleep(0.1)
+        bus._running = False
+
+        try:
+            await asyncio.wait_for(consume_task, timeout=0.5)
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            consume_task.cancel()
+            try:
+                await consume_task
+            except asyncio.CancelledError:
+                pass
+
+        # Should continue processing despite store error
+        assert mock_redis.xreadgroup.called
+
+    @pytest.mark.asyncio
+    async def test_consume_loop_works_without_store(self):
+        """Test consume loop works correctly when store is not provided."""
+        bus = RedisStreamEventBus(redis_url="redis://localhost:6379")
+        mock_redis = AsyncMock()
+        bus._redis = mock_redis
+        bus._running = True
+
+        call_count = 0
+
+        async def xreadgroup_side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return [
+                    (
+                        "omni-stream:test.topic",
+                        [("1234567890-0", {"data": '{"content": "test"}'})],
+                    )
+                ]
+            bus._running = False
+            return []
+
+        async def callback_with_stop(msg):
+            await asyncio.sleep(0.01)
+            bus._running = False
+
+        mock_redis.xreadgroup = AsyncMock(side_effect=xreadgroup_side_effect)
+        mock_redis.xack = AsyncMock()
+        mock_redis.xadd = AsyncMock()
+
+        consume_task = asyncio.create_task(
+            bus._consume_loop(
+                stream_name="omni-stream:test.topic",
+                topic="test.topic",
+                group="group:test.topic:test-agent",
+                consumer="consumer:test-agent-1",
+                callback=callback_with_stop,
+            )
+        )
+
+        # Wait for loop to process
+        await asyncio.sleep(0.1)
+        bus._running = False
+
+        try:
+            await asyncio.wait_for(consume_task, timeout=0.5)
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            consume_task.cancel()
+            try:
+                await consume_task
+            except asyncio.CancelledError:
+                pass
+
+        # Should work without store
+        assert mock_redis.xreadgroup.called
+
+    @pytest.mark.asyncio
+    async def test_consume_loop_auto_connects_if_not_connected(self):
+        """Test consume loop auto-connects if Redis not connected."""
+        bus = RedisStreamEventBus(redis_url="redis://localhost:6379")
+        bus._redis = None  # Not connected
+        bus._running = True
+
+        call_count = 0
+
+        async def xreadgroup_side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                # After first call, stop the bus so loop exits
+                await asyncio.sleep(0.01)
+                bus._running = False
+            return []
+
+        mock_redis = AsyncMock()
+        mock_redis.xreadgroup = AsyncMock(side_effect=xreadgroup_side_effect)
+
+        with patch(
+            "omnidaemon.event_bus.redis_stream_bus.aioredis.from_url",
+            return_value=mock_redis,
+        ):
+
+            async def callback(msg):
+                pass
+
+            consume_task = asyncio.create_task(
+                bus._consume_loop(
+                    stream_name="omni-stream:test.topic",
+                    topic="test.topic",
+                    group="group:test.topic:test-agent",
+                    consumer="consumer:test-agent-1",
+                    callback=callback,
+                )
+            )
+
+            try:
+                await asyncio.wait_for(consume_task, timeout=1.0)
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                bus._running = False
+                consume_task.cancel()
+                try:
+                    await consume_task
+                except asyncio.CancelledError:
+                    pass
+
+            # Should have connected
+            assert bus._redis is not None
+
+    @pytest.mark.asyncio
+    async def test_consume_loop_handles_cancelled_error(self):
+        """Test consume loop handles CancelledError gracefully."""
+        bus = RedisStreamEventBus(redis_url="redis://localhost:6379")
+        mock_redis = AsyncMock()
+        bus._redis = mock_redis
+        bus._running = True
+
+        mock_redis.xreadgroup = AsyncMock(side_effect=asyncio.CancelledError())
+
+        async def callback(msg):
+            pass
+
+        consume_task = asyncio.create_task(
+            bus._consume_loop(
+                stream_name="omni-stream:test.topic",
+                topic="test.topic",
+                group="group:test.topic:test-agent",
+                consumer="consumer:test-agent-1",
+                callback=callback,
+            )
+        )
+
+        try:
+            await asyncio.wait_for(consume_task, timeout=0.5)
+        except (asyncio.CancelledError, asyncio.TimeoutError):
+            consume_task.cancel()
+            try:
+                await consume_task
+            except asyncio.CancelledError:
+                pass
+
+        # Should handle cancellation gracefully
+        assert consume_task.done()
+
+    @pytest.mark.asyncio
+    async def test_consume_loop_handles_nogroup_error(self):
+        """Test consume loop handles NOGROUP error."""
+        bus = RedisStreamEventBus(redis_url="redis://localhost:6379")
+        mock_redis = AsyncMock()
+        bus._redis = mock_redis
+        bus._running = True
+
+        mock_redis.xreadgroup = AsyncMock(side_effect=Exception("NOGROUP error"))
+
+        async def callback(msg):
+            pass
+
+        consume_task = asyncio.create_task(
+            bus._consume_loop(
+                stream_name="omni-stream:test.topic",
+                topic="test.topic",
+                group="group:test.topic:test-agent",
+                consumer="consumer:test-agent-1",
+                callback=callback,
+            )
+        )
+
+        try:
+            await asyncio.wait_for(consume_task, timeout=0.5)
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            consume_task.cancel()
+            try:
+                await consume_task
+            except asyncio.CancelledError:
+                pass
+
+        # Should exit on NOGROUP error
+        assert consume_task.done()
+
+    @pytest.mark.asyncio
+    async def test_consume_loop_handles_generic_exception(self):
+        """Test consume loop handles generic exceptions and retries."""
+        bus = RedisStreamEventBus(redis_url="redis://localhost:6379")
+        mock_redis = AsyncMock()
+        bus._redis = mock_redis
+        bus._running = True
+
+        call_count = 0
+
+        async def xreadgroup_side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise Exception("Generic error")
+            bus._running = False
+            return []
+
+        mock_redis.xreadgroup = AsyncMock(side_effect=xreadgroup_side_effect)
+
+        async def callback(msg):
+            pass
+
+        consume_task = asyncio.create_task(
+            bus._consume_loop(
+                stream_name="omni-stream:test.topic",
+                topic="test.topic",
+                group="group:test.topic:test-agent",
+                consumer="consumer:test-agent-1",
+                callback=callback,
+            )
+        )
+
+        try:
+            await asyncio.wait_for(consume_task, timeout=1.0)
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            bus._running = False
+            consume_task.cancel()
+            try:
+                await consume_task
+            except asyncio.CancelledError:
+                pass
+
+        # Should handle error and continue
+        assert mock_redis.xreadgroup.called
+
+    @pytest.mark.asyncio
+    async def test_consume_loop_sync_callback_execution(self):
+        """Test consume loop executes sync callbacks in executor."""
+        bus = RedisStreamEventBus(redis_url="redis://localhost:6379")
+        mock_redis = AsyncMock()
+        bus._redis = mock_redis
+        bus._running = True
+
+        callback_called = asyncio.Event()
+
+        def sync_callback(msg):
+            callback_called.set()
+            return "result"
+
+        call_count = 0
+
+        async def xreadgroup_side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return [
+                    (
+                        "omni-stream:test.topic",
+                        [("1234567890-0", {"data": '{"content": "test"}'})],
+                    )
+                ]
+            bus._running = False
+            return []
+
+        mock_redis.xreadgroup = AsyncMock(side_effect=xreadgroup_side_effect)
+        mock_redis.xack = AsyncMock()
+        mock_redis.xadd = AsyncMock()
+
+        consume_task = asyncio.create_task(
+            bus._consume_loop(
+                stream_name="omni-stream:test.topic",
+                topic="test.topic",
+                group="group:test.topic:test-agent",
+                consumer="consumer:test-agent-1",
+                callback=sync_callback,
+            )
+        )
+
+        try:
+            await asyncio.wait_for(callback_called.wait(), timeout=0.5)
+        except asyncio.TimeoutError:
+            pass
+
+        bus._running = False
+
+        try:
+            await asyncio.wait_for(consume_task, timeout=0.5)
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            consume_task.cancel()
+            try:
+                await consume_task
+            except asyncio.CancelledError:
+                pass
+
+        # Sync callback should have been called
+        assert callback_called.is_set()
+
+    @pytest.mark.asyncio
+    async def test_consume_loop_integration_with_json_store(self):
+        """Integration test: verify consume loop checks subscription status from real JSONStore."""
+        # Create temporary directory for JSON store
+        temp_dir = tempfile.mkdtemp()
+        try:
+            json_store = JSONStore(storage_dir=temp_dir)
+            await json_store.connect()
+
+            bus = RedisStreamEventBus(
+                redis_url="redis://localhost:6379", store=json_store
+            )
+            mock_redis = AsyncMock()
+            bus._redis = mock_redis
+            bus._running = True
+
+            group_name = "group:test.topic:test-agent"
+            subscription_key = f"_subscription_active:{group_name}"
+
+            # Set subscription as active initially
+            await json_store.save_config(subscription_key, True)
+
+            call_count = 0
+
+            async def xreadgroup_side_effect(*args, **kwargs):
+                nonlocal call_count
+                call_count += 1
+                if call_count == 1:
+                    # After first call, mark subscription as inactive
+                    await json_store.save_config(subscription_key, False)
+                    return []
+                return []
+
+            async def callback(msg):
+                pass
+
+            mock_redis.xreadgroup = AsyncMock(side_effect=xreadgroup_side_effect)
+
+            consume_task = asyncio.create_task(
+                bus._consume_loop(
+                    stream_name="omni-stream:test.topic",
+                    topic="test.topic",
+                    group=group_name,
+                    consumer="consumer:test-agent-1",
+                    callback=callback,
+                )
+            )
+
+            # Wait for loop to check subscription status and exit
+            try:
+                await asyncio.wait_for(consume_task, timeout=1.0)
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                bus._running = False
+                consume_task.cancel()
+                try:
+                    await consume_task
+                except asyncio.CancelledError:
+                    pass
+
+            # Loop should have exited when subscription became inactive
+            assert consume_task.done()
+
+            await json_store.close()
+        finally:
+            # Clean up temporary directory
+            shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 class TestRedisStreamEventBusReclaimLoop:
@@ -2159,6 +2895,896 @@ class TestRedisStreamEventBusReclaimLoop:
             except asyncio.CancelledError:
                 pass
 
+    @pytest.mark.asyncio
+    async def test_reclaim_loop_checks_subscription_active_with_store(self):
+        """Test reclaim loop checks subscription active status from store."""
+        mock_store = AsyncMock()
+        mock_store.get_config = AsyncMock(return_value=True)  # Subscription is active
+        bus = RedisStreamEventBus(
+            redis_url="redis://localhost:6379",
+            store=mock_store,
+            reclaim_interval=1,
+        )
+        mock_redis = AsyncMock()
+        bus._redis = mock_redis
+        bus._running = True
+
+        call_count = 0
+
+        async def xpending_side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                await asyncio.sleep(0.01)
+                bus._running = False
+                return []
+            return []
+
+        async def callback(msg):
+            pass
+
+        mock_redis.xpending_range = AsyncMock(side_effect=xpending_side_effect)
+
+        group = "group:test.topic:test-agent"
+        reclaim_task = asyncio.create_task(
+            bus._reclaim_loop(
+                stream_name="omni-stream:test.topic",
+                topic="test.topic",
+                group=group,
+                consumer="consumer:test-agent-1",
+                callback=callback,
+                reclaim_idle_ms=180000,
+                dlq_retry_limit=3,
+            )
+        )
+
+        # Wait for loop to process
+        try:
+            await asyncio.wait_for(reclaim_task, timeout=1.0)
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            bus._running = False
+            reclaim_task.cancel()
+            try:
+                await reclaim_task
+            except asyncio.CancelledError:
+                pass
+
+        # Verify store.get_config was called to check subscription status
+        assert mock_store.get_config.called
+        call_args = mock_store.get_config.call_args
+        assert call_args[0][0] == "_subscription_active:group:test.topic:test-agent"
+        # default=False is a keyword argument, not positional
+        assert call_args[1]["default"] is False
+
+    @pytest.mark.asyncio
+    async def test_reclaim_loop_stops_when_subscription_inactive(self):
+        """Test reclaim loop stops when subscription is marked inactive (lines 464-467)."""
+        mock_store = AsyncMock()
+        # First call returns True (active), second call returns False (inactive)
+        call_count = 0
+
+        async def get_config_side_effect(key, default):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return True  # Active initially
+            # On second check, return False to trigger the break at line 467
+            return False  # Inactive on second check
+
+        mock_store.get_config = AsyncMock(side_effect=get_config_side_effect)
+        bus = RedisStreamEventBus(
+            redis_url="redis://localhost:6379",
+            store=mock_store,
+            reclaim_interval=0.1,  # Shorter interval to ensure multiple iterations
+        )
+        mock_redis = AsyncMock()
+        bus._redis = mock_redis
+        bus._running = True
+
+        # The loop checks subscription status at the start of each iteration
+        # We need to ensure it runs at least 2 iterations:
+        # - First iteration: subscription active, loop continues
+        # - Second iteration: subscription inactive, loop breaks at line 467
+
+        async def xpending_side_effect(*args, **kwargs):
+            # Always return empty to allow loop to continue to next iteration
+            # The loop will sleep (reclaim_interval=0.1) and check subscription again
+            return []
+
+        async def callback(msg):
+            pass
+
+        mock_redis.xpending_range = AsyncMock(side_effect=xpending_side_effect)
+
+        group = "group:test.topic:test-agent"
+        reclaim_task = asyncio.create_task(
+            bus._reclaim_loop(
+                stream_name="omni-stream:test.topic",
+                topic="test.topic",
+                group=group,
+                consumer="consumer:test-agent-1",
+                callback=callback,
+                reclaim_idle_ms=180000,
+                dlq_retry_limit=3,
+            )
+        )
+
+        # Wait for loop to run at least 2 iterations
+        # First iteration: checks subscription (active), processes empty pending, sleeps 0.1s
+        # Second iteration: checks subscription (inactive), breaks at line 467
+        await asyncio.sleep(0.15)  # Wait for at least 2 iterations (0.1s interval)
+
+        # Wait for loop to exit
+        try:
+            await asyncio.wait_for(reclaim_task, timeout=1.0)
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            bus._running = False
+            reclaim_task.cancel()
+            try:
+                await reclaim_task
+            except asyncio.CancelledError:
+                pass
+
+        # Loop should have exited when subscription became inactive (lines 464-467)
+        assert reclaim_task.done()
+        # Verify get_config was called at least twice (once active, once inactive to trigger break)
+        # The loop checks subscription at the start of each iteration, so we need at least 2 iterations
+        assert mock_store.get_config.call_count >= 2
+
+    @pytest.mark.asyncio
+    async def test_reclaim_loop_handles_store_error_gracefully(self):
+        """Test reclaim loop handles store errors gracefully."""
+        mock_store = AsyncMock()
+        mock_store.get_config = AsyncMock(side_effect=Exception("Store error"))
+        bus = RedisStreamEventBus(
+            redis_url="redis://localhost:6379",
+            store=mock_store,
+            reclaim_interval=1,
+        )
+        mock_redis = AsyncMock()
+        bus._redis = mock_redis
+        bus._running = True
+
+        call_count = 0
+
+        async def xpending_side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                await asyncio.sleep(0.01)
+                bus._running = False
+                return []
+            return []
+
+        async def callback(msg):
+            pass
+
+        mock_redis.xpending_range = AsyncMock(side_effect=xpending_side_effect)
+
+        reclaim_task = asyncio.create_task(
+            bus._reclaim_loop(
+                stream_name="omni-stream:test.topic",
+                topic="test.topic",
+                group="group:test.topic:test-agent",
+                consumer="consumer:test-agent-1",
+                callback=callback,
+                reclaim_idle_ms=180000,
+                dlq_retry_limit=3,
+            )
+        )
+
+        # Wait for loop to process
+        try:
+            await asyncio.wait_for(reclaim_task, timeout=1.0)
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            bus._running = False
+            reclaim_task.cancel()
+            try:
+                await reclaim_task
+            except asyncio.CancelledError:
+                pass
+
+        # Should continue processing despite store error
+        assert mock_redis.xpending_range.called
+
+    @pytest.mark.asyncio
+    async def test_reclaim_loop_works_without_store(self):
+        """Test reclaim loop works correctly when store is not provided."""
+        bus = RedisStreamEventBus(
+            redis_url="redis://localhost:6379", reclaim_interval=1
+        )
+        mock_redis = AsyncMock()
+        bus._redis = mock_redis
+        bus._running = True
+
+        call_count = 0
+
+        async def xpending_side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                await asyncio.sleep(0.01)
+                bus._running = False
+                return []
+            return []
+
+        async def callback(msg):
+            pass
+
+        mock_redis.xpending_range = AsyncMock(side_effect=xpending_side_effect)
+
+        reclaim_task = asyncio.create_task(
+            bus._reclaim_loop(
+                stream_name="omni-stream:test.topic",
+                topic="test.topic",
+                group="group:test.topic:test-agent",
+                consumer="consumer:test-agent-1",
+                callback=callback,
+                reclaim_idle_ms=180000,
+                dlq_retry_limit=3,
+            )
+        )
+
+        # Wait for loop to process
+        try:
+            await asyncio.wait_for(reclaim_task, timeout=1.0)
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            bus._running = False
+            reclaim_task.cancel()
+            try:
+                await reclaim_task
+            except asyncio.CancelledError:
+                pass
+
+        # Should work without store
+        assert mock_redis.xpending_range.called
+
+    @pytest.mark.asyncio
+    async def test_reclaim_loop_auto_connects_if_not_connected(self):
+        """Test reclaim loop auto-connects if Redis not connected."""
+        bus = RedisStreamEventBus(
+            redis_url="redis://localhost:6379", reclaim_interval=1
+        )
+        bus._redis = None  # Not connected
+        bus._running = True
+
+        call_count = 0
+
+        async def xpending_side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                # After first call, stop the bus so loop exits
+                await asyncio.sleep(0.01)
+                bus._running = False
+            return []
+
+        mock_redis = AsyncMock()
+        mock_redis.xpending_range = AsyncMock(side_effect=xpending_side_effect)
+
+        with patch(
+            "omnidaemon.event_bus.redis_stream_bus.aioredis.from_url",
+            return_value=mock_redis,
+        ):
+
+            async def callback(msg):
+                pass
+
+            reclaim_task = asyncio.create_task(
+                bus._reclaim_loop(
+                    stream_name="omni-stream:test.topic",
+                    topic="test.topic",
+                    group="group:test.topic:test-agent",
+                    consumer="consumer:test-agent-1",
+                    callback=callback,
+                    reclaim_idle_ms=180000,
+                    dlq_retry_limit=3,
+                )
+            )
+
+            try:
+                await asyncio.wait_for(reclaim_task, timeout=1.0)
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                bus._running = False
+                reclaim_task.cancel()
+                try:
+                    await reclaim_task
+                except asyncio.CancelledError:
+                    pass
+
+            # Should have connected
+            assert bus._redis is not None
+
+    @pytest.mark.asyncio
+    async def test_reclaim_loop_handles_invalid_entry_format(self):
+        """Test reclaim loop handles invalid pending entry formats."""
+        bus = RedisStreamEventBus(
+            redis_url="redis://localhost:6379", reclaim_interval=1
+        )
+        mock_redis = AsyncMock()
+        bus._redis = mock_redis
+        bus._running = True
+
+        # Return invalid entry format (not dict, tuple, or list)
+        call_count = 0
+
+        async def xpending_side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                await asyncio.sleep(0.01)
+                bus._running = False
+                return ["invalid_entry"]  # Invalid format
+            return []
+
+        mock_redis.xpending_range = AsyncMock(side_effect=xpending_side_effect)
+
+        async def callback(msg):
+            pass
+
+        reclaim_task = asyncio.create_task(
+            bus._reclaim_loop(
+                stream_name="omni-stream:test.topic",
+                topic="test.topic",
+                group="group:test.topic:test-agent",
+                consumer="consumer:test-agent-1",
+                callback=callback,
+                reclaim_idle_ms=180000,
+                dlq_retry_limit=3,
+            )
+        )
+
+        try:
+            await asyncio.wait_for(reclaim_task, timeout=1.0)
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            bus._running = False
+            reclaim_task.cancel()
+            try:
+                await reclaim_task
+            except asyncio.CancelledError:
+                pass
+
+        # Should handle invalid format gracefully
+        assert mock_redis.xpending_range.called
+
+    @pytest.mark.asyncio
+    async def test_reclaim_loop_handles_json_decode_error(self):
+        """Test reclaim loop handles JSON decode errors in reclaimed messages."""
+        bus = RedisStreamEventBus(
+            redis_url="redis://localhost:6379", reclaim_interval=1
+        )
+        mock_redis = AsyncMock()
+        bus._redis = mock_redis
+        bus._running = True
+
+        msg_id = "1234567890-0"
+        call_count = 0
+
+        async def xpending_side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return [{"message_id": msg_id, "time_since_delivered": 200000}]
+            bus._running = False
+            return []
+
+        # Return message with invalid JSON
+        mock_redis.xpending_range = AsyncMock(side_effect=xpending_side_effect)
+        mock_redis.xclaim = AsyncMock(
+            return_value=[(msg_id, {"data": "invalid json{"})]
+        )
+        mock_redis.hincrby = AsyncMock(return_value=1)
+        mock_redis.expire = AsyncMock()
+
+        async def callback(msg):
+            # Should receive payload with raw data
+            assert "raw" in msg
+
+        reclaim_task = asyncio.create_task(
+            bus._reclaim_loop(
+                stream_name="omni-stream:test.topic",
+                topic="test.topic",
+                group="group:test.topic:test-agent",
+                consumer="consumer:test-agent-1",
+                callback=callback,
+                reclaim_idle_ms=180000,
+                dlq_retry_limit=3,
+            )
+        )
+
+        await asyncio.sleep(0.1)
+        bus._running = False
+
+        try:
+            await asyncio.wait_for(reclaim_task, timeout=0.5)
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            reclaim_task.cancel()
+            try:
+                await reclaim_task
+            except asyncio.CancelledError:
+                pass
+
+        # Should handle JSON error gracefully
+        assert mock_redis.xclaim.called
+
+    @pytest.mark.asyncio
+    async def test_reclaim_loop_sync_callback_execution(self):
+        """Test reclaim loop executes sync callbacks in executor."""
+        bus = RedisStreamEventBus(
+            redis_url="redis://localhost:6379", reclaim_interval=1
+        )
+        mock_redis = AsyncMock()
+        bus._redis = mock_redis
+        bus._running = True
+
+        callback_called = asyncio.Event()
+
+        def sync_callback(msg):
+            callback_called.set()
+            return "result"
+
+        msg_id = "1234567890-0"
+        call_count = 0
+
+        async def xpending_side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return [{"message_id": msg_id, "time_since_delivered": 200000}]
+            bus._running = False
+            return []
+
+        mock_redis.xpending_range = AsyncMock(side_effect=xpending_side_effect)
+        # Include delivery_attempts in the payload to avoid KeyError when incrementing
+        mock_redis.xclaim = AsyncMock(
+            return_value=[
+                (msg_id, {"data": '{"content": "test", "delivery_attempts": 0}'})
+            ]
+        )
+        mock_redis.hincrby = AsyncMock(return_value=1)
+        mock_redis.expire = AsyncMock()
+        mock_redis.xack = AsyncMock()
+        mock_redis.hdel = AsyncMock()
+        mock_redis.xadd = AsyncMock()
+
+        reclaim_task = asyncio.create_task(
+            bus._reclaim_loop(
+                stream_name="omni-stream:test.topic",
+                topic="test.topic",
+                group="group:test.topic:test-agent",
+                consumer="consumer:test-agent-1",
+                callback=sync_callback,
+                reclaim_idle_ms=180000,
+                dlq_retry_limit=3,
+            )
+        )
+
+        try:
+            await asyncio.wait_for(callback_called.wait(), timeout=0.5)
+        except asyncio.TimeoutError:
+            pass
+
+        bus._running = False
+
+        try:
+            await asyncio.wait_for(reclaim_task, timeout=0.5)
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            reclaim_task.cancel()
+            try:
+                await reclaim_task
+            except asyncio.CancelledError:
+                pass
+
+        # Sync callback should have been called
+        assert callback_called.is_set()
+
+    @pytest.mark.asyncio
+    async def test_reclaim_loop_handles_entry_processing_error(self):
+        """Test reclaim loop handles errors during entry processing."""
+        bus = RedisStreamEventBus(
+            redis_url="redis://localhost:6379", reclaim_interval=1
+        )
+        mock_redis = AsyncMock()
+        bus._redis = mock_redis
+        bus._running = True
+
+        call_count = 0
+
+        async def xpending_side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                # Return entry that will cause processing error
+                await asyncio.sleep(0.01)
+                bus._running = False
+                return [{"message_id": None, "time_since_delivered": 200000}]
+            return []
+
+        mock_redis.xpending_range = AsyncMock(side_effect=xpending_side_effect)
+
+        async def callback(msg):
+            pass
+
+        reclaim_task = asyncio.create_task(
+            bus._reclaim_loop(
+                stream_name="omni-stream:test.topic",
+                topic="test.topic",
+                group="group:test.topic:test-agent",
+                consumer="consumer:test-agent-1",
+                callback=callback,
+                reclaim_idle_ms=180000,
+                dlq_retry_limit=3,
+            )
+        )
+
+        try:
+            await asyncio.wait_for(reclaim_task, timeout=1.0)
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            bus._running = False
+            reclaim_task.cancel()
+            try:
+                await reclaim_task
+            except asyncio.CancelledError:
+                pass
+
+        # Should handle processing error gracefully
+        assert mock_redis.xpending_range.called
+
+    @pytest.mark.asyncio
+    async def test_reclaim_loop_handles_tuple_entry_format(self):
+        """Test reclaim loop handles tuple/list entry format from xpending."""
+        bus = RedisStreamEventBus(
+            redis_url="redis://localhost:6379", reclaim_interval=1
+        )
+        mock_redis = AsyncMock()
+        bus._redis = mock_redis
+        bus._running = True
+
+        msg_id = "1234567890-0"
+        call_count = 0
+
+        async def xpending_side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                # Return tuple format: (msg_id, consumer_name, idle_time, delivery_count)
+                return [(msg_id, "consumer-1", 200000, 1)]
+            bus._running = False
+            return []
+
+        mock_redis.xpending_range = AsyncMock(side_effect=xpending_side_effect)
+        mock_redis.xclaim = AsyncMock(return_value=[])
+        mock_redis.xadd = AsyncMock()
+
+        async def callback(msg):
+            pass
+
+        reclaim_task = asyncio.create_task(
+            bus._reclaim_loop(
+                stream_name="omni-stream:test.topic",
+                topic="test.topic",
+                group="group:test.topic:test-agent",
+                consumer="consumer:test-agent-1",
+                callback=callback,
+                reclaim_idle_ms=180000,
+                dlq_retry_limit=3,
+            )
+        )
+
+        try:
+            await asyncio.wait_for(reclaim_task, timeout=1.0)
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            bus._running = False
+            reclaim_task.cancel()
+            try:
+                await reclaim_task
+            except asyncio.CancelledError:
+                pass
+
+        # Should handle tuple format
+        assert mock_redis.xpending_range.called
+
+    @pytest.mark.asyncio
+    async def test_reclaim_loop_handles_entry_processing_exception(self):
+        """Test reclaim loop handles exceptions during entry processing (lines 605-606)."""
+        bus = RedisStreamEventBus(
+            redis_url="redis://localhost:6379", reclaim_interval=1
+        )
+        mock_redis = AsyncMock()
+        bus._redis = mock_redis
+        bus._running = True
+
+        msg_id = "1234567890-0"
+        call_count = 0
+
+        async def xpending_side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                # Return entry that will cause exception during processing
+                return [{"message_id": msg_id, "time_since_delivered": 200000}]
+            bus._running = False
+            return []
+
+        # Make xclaim raise an exception to trigger the exception handler at line 605
+        async def xclaim_side_effect(*args, **kwargs):
+            raise Exception("XCLAIM processing failed")
+
+        mock_redis.xpending_range = AsyncMock(side_effect=xpending_side_effect)
+        mock_redis.xclaim = AsyncMock(side_effect=xclaim_side_effect)
+
+        async def callback(msg):
+            pass
+
+        reclaim_task = asyncio.create_task(
+            bus._reclaim_loop(
+                stream_name="omni-stream:test.topic",
+                topic="test.topic",
+                group="group:test.topic:test-agent",
+                consumer="consumer:test-agent-1",
+                callback=callback,
+                reclaim_idle_ms=180000,
+                dlq_retry_limit=3,
+            )
+        )
+
+        try:
+            await asyncio.wait_for(reclaim_task, timeout=1.0)
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            bus._running = False
+            reclaim_task.cancel()
+            try:
+                await reclaim_task
+            except asyncio.CancelledError:
+                pass
+
+        # Should handle exception gracefully (exception handler at line 605-606)
+        assert mock_redis.xpending_range.called
+
+    @pytest.mark.asyncio
+    async def test_reclaim_loop_handles_nogroup_error(self):
+        """Test reclaim loop handles NOGROUP error."""
+        bus = RedisStreamEventBus(
+            redis_url="redis://localhost:6379", reclaim_interval=1
+        )
+        mock_redis = AsyncMock()
+        bus._redis = mock_redis
+        bus._running = True
+
+        mock_redis.xpending_range = AsyncMock(side_effect=Exception("NOGROUP error"))
+
+        async def callback(msg):
+            pass
+
+        reclaim_task = asyncio.create_task(
+            bus._reclaim_loop(
+                stream_name="omni-stream:test.topic",
+                topic="test.topic",
+                group="group:test.topic:test-agent",
+                consumer="consumer:test-agent-1",
+                callback=callback,
+                reclaim_idle_ms=180000,
+                dlq_retry_limit=3,
+            )
+        )
+
+        try:
+            await asyncio.wait_for(reclaim_task, timeout=0.5)
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            reclaim_task.cancel()
+            try:
+                await reclaim_task
+            except asyncio.CancelledError:
+                pass
+
+        # Should exit on NOGROUP error
+        assert reclaim_task.done()
+
+    @pytest.mark.asyncio
+    async def test_reclaim_loop_handles_generic_exception(self):
+        """Test reclaim loop handles generic exceptions and retries (lines 615-630)."""
+        bus = RedisStreamEventBus(
+            redis_url="redis://localhost:6379", reclaim_interval=0.1
+        )
+        mock_redis = AsyncMock()
+        bus._redis = mock_redis
+        bus._running = True
+
+        call_count = 0
+
+        async def xpending_side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                # Raise generic exception (not NOGROUP, not connection error)
+                raise Exception("Generic processing error")
+            # After exception handling, stop the loop
+            await asyncio.sleep(0.01)
+            bus._running = False
+            return []
+
+        mock_redis.xpending_range = AsyncMock(side_effect=xpending_side_effect)
+
+        async def callback(msg):
+            pass
+
+        reclaim_task = asyncio.create_task(
+            bus._reclaim_loop(
+                stream_name="omni-stream:test.topic",
+                topic="test.topic",
+                group="group:test.topic:test-agent",
+                consumer="consumer:test-agent-1",
+                callback=callback,
+                reclaim_idle_ms=180000,
+                dlq_retry_limit=3,
+            )
+        )
+
+        try:
+            await asyncio.wait_for(reclaim_task, timeout=1.0)
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            bus._running = False
+            reclaim_task.cancel()
+            try:
+                await reclaim_task
+            except asyncio.CancelledError:
+                pass
+
+        # Should handle error and continue (lines 615-630 exception handling)
+        assert mock_redis.xpending_range.called
+
+    @pytest.mark.asyncio
+    async def test_reclaim_loop_handles_connection_closed_error(self):
+        """Test reclaim loop handles connection closed error (lines 623-627)."""
+        bus = RedisStreamEventBus(
+            redis_url="redis://localhost:6379", reclaim_interval=1
+        )
+        mock_redis = AsyncMock()
+        bus._redis = mock_redis
+        bus._running = True
+
+        mock_redis.xpending_range = AsyncMock(
+            side_effect=Exception("Connection closed")
+        )
+
+        async def callback(msg):
+            pass
+
+        reclaim_task = asyncio.create_task(
+            bus._reclaim_loop(
+                stream_name="omni-stream:test.topic",
+                topic="test.topic",
+                group="group:test.topic:test-agent",
+                consumer="consumer:test-agent-1",
+                callback=callback,
+                reclaim_idle_ms=180000,
+                dlq_retry_limit=3,
+            )
+        )
+
+        try:
+            await asyncio.wait_for(reclaim_task, timeout=1.0)
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            reclaim_task.cancel()
+            try:
+                await reclaim_task
+            except asyncio.CancelledError:
+                pass
+
+        # Should exit on connection closed error (lines 623-627)
+        assert reclaim_task.done()
+
+    @pytest.mark.asyncio
+    async def test_reclaim_loop_handles_connection_reset_error(self):
+        """Test reclaim loop handles connection reset error (lines 623-627)."""
+        bus = RedisStreamEventBus(
+            redis_url="redis://localhost:6379", reclaim_interval=1
+        )
+        mock_redis = AsyncMock()
+        bus._redis = mock_redis
+        bus._running = True
+
+        mock_redis.xpending_range = AsyncMock(side_effect=Exception("Connection reset"))
+
+        async def callback(msg):
+            pass
+
+        reclaim_task = asyncio.create_task(
+            bus._reclaim_loop(
+                stream_name="omni-stream:test.topic",
+                topic="test.topic",
+                group="group:test.topic:test-agent",
+                consumer="consumer:test-agent-1",
+                callback=callback,
+                reclaim_idle_ms=180000,
+                dlq_retry_limit=3,
+            )
+        )
+
+        try:
+            await asyncio.wait_for(reclaim_task, timeout=1.0)
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            reclaim_task.cancel()
+            try:
+                await reclaim_task
+            except asyncio.CancelledError:
+                pass
+
+        # Should exit on connection reset error (lines 623-627)
+        assert reclaim_task.done()
+
+    @pytest.mark.asyncio
+    async def test_reclaim_loop_integration_with_json_store(self):
+        """Integration test: verify reclaim loop checks subscription status from real JSONStore."""
+        # Create temporary directory for JSON store
+        temp_dir = tempfile.mkdtemp()
+        try:
+            json_store = JSONStore(storage_dir=temp_dir)
+            await json_store.connect()
+
+            bus = RedisStreamEventBus(
+                redis_url="redis://localhost:6379",
+                store=json_store,
+                reclaim_interval=1,
+            )
+            mock_redis = AsyncMock()
+            bus._redis = mock_redis
+            bus._running = True
+
+            group_name = "group:test.topic:test-agent"
+            subscription_key = f"_subscription_active:{group_name}"
+
+            # Set subscription as active initially
+            await json_store.save_config(subscription_key, True)
+
+            call_count = 0
+
+            async def xpending_side_effect(*args, **kwargs):
+                nonlocal call_count
+                call_count += 1
+                if call_count == 1:
+                    # After first call, mark subscription as inactive
+                    await json_store.save_config(subscription_key, False)
+                    await asyncio.sleep(0.01)
+                    return []
+                return []
+
+            async def callback(msg):
+                pass
+
+            mock_redis.xpending_range = AsyncMock(side_effect=xpending_side_effect)
+
+            reclaim_task = asyncio.create_task(
+                bus._reclaim_loop(
+                    stream_name="omni-stream:test.topic",
+                    topic="test.topic",
+                    group=group_name,
+                    consumer="consumer:test-agent-1",
+                    callback=callback,
+                    reclaim_idle_ms=180000,
+                    dlq_retry_limit=3,
+                )
+            )
+
+            # Wait for loop to check subscription status and exit
+            try:
+                await asyncio.wait_for(reclaim_task, timeout=1.0)
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                bus._running = False
+                reclaim_task.cancel()
+                try:
+                    await reclaim_task
+                except asyncio.CancelledError:
+                    pass
+
+            # Loop should have exited when subscription became inactive
+            assert reclaim_task.done()
+
+            await json_store.close()
+        finally:
+            # Clean up temporary directory
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
 
 class TestRedisStreamEventBusDLQ:
     """Test suite for RedisStreamEventBus DLQ operations."""
@@ -2297,6 +3923,24 @@ class TestRedisStreamEventBusDLQ:
 
         # Verify xadd was called (even though it failed)
         mock_redis.xadd.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_send_to_dlq_handles_redis_not_connected(self):
+        """Test send_to_dlq handles Redis not connected."""
+        bus = RedisStreamEventBus(redis_url="redis://localhost:6379")
+        bus._redis = None  # Not connected
+
+        # Should not raise exception
+        await bus._send_to_dlq(
+            group="group:test.topic:test-agent",
+            stream_name="omni-stream:test.topic",
+            msg_id="1234567890-0",
+            payload={"content": "test"},
+            error="Error",
+            retry_count=3,
+        )
+
+        # Should return early without error
 
 
 class TestRedisStreamEventBusUnsubscribe:
@@ -2460,6 +4104,205 @@ class TestRedisStreamEventBusUnsubscribe:
 
         mock_redis.xgroup_destroy.assert_called_once()
 
+    @pytest.mark.asyncio
+    async def test_unsubscribe_marks_subscription_inactive_with_store(self):
+        """Test unsubscribe marks subscription as inactive when store is provided."""
+        mock_store = AsyncMock()
+        mock_store.save_config = AsyncMock()
+        bus = RedisStreamEventBus(redis_url="redis://localhost:6379", store=mock_store)
+        mock_redis = AsyncMock()
+        bus._redis = mock_redis
+
+        group_name = "group:test.topic:test-agent"
+        bus._consumers[group_name] = {"consume_tasks": [], "reclaim_tasks": []}
+
+        await bus.unsubscribe("test.topic", "test-agent")
+
+        # Verify store.save_config was called with False to mark as inactive
+        mock_store.save_config.assert_called_once()
+        call_args = mock_store.save_config.call_args
+        assert call_args[0][0] == "_subscription_active:group:test.topic:test-agent"
+        assert call_args[0][1] is False
+
+    @pytest.mark.asyncio
+    async def test_unsubscribe_handles_store_error_gracefully(self):
+        """Test unsubscribe handles store errors gracefully."""
+        mock_store = AsyncMock()
+        mock_store.save_config = AsyncMock(side_effect=Exception("Store error"))
+        bus = RedisStreamEventBus(redis_url="redis://localhost:6379", store=mock_store)
+        mock_redis = AsyncMock()
+        bus._redis = mock_redis
+
+        group_name = "group:test.topic:test-agent"
+        bus._consumers[group_name] = {"consume_tasks": [], "reclaim_tasks": []}
+
+        # Should not raise exception
+        await bus.unsubscribe("test.topic", "test-agent")
+
+        # Should still remove from consumers
+        assert group_name not in bus._consumers
+
+    @pytest.mark.asyncio
+    async def test_unsubscribe_works_without_store(self):
+        """Test unsubscribe works correctly when store is not provided."""
+        bus = RedisStreamEventBus(redis_url="redis://localhost:6379")
+        mock_redis = AsyncMock()
+        bus._redis = mock_redis
+
+        group_name = "group:test.topic:test-agent"
+        bus._consumers[group_name] = {"consume_tasks": [], "reclaim_tasks": []}
+
+        # Should work without store
+        await bus.unsubscribe("test.topic", "test-agent")
+
+        assert group_name not in bus._consumers
+
+    @pytest.mark.asyncio
+    async def test_unsubscribe_handles_empty_task_lists(self):
+        """Test unsubscribe handles empty consume/reclaim task lists."""
+        bus = RedisStreamEventBus(redis_url="redis://localhost:6379")
+        mock_redis = AsyncMock()
+        bus._redis = mock_redis
+
+        group_name = "group:test.topic:test-agent"
+        bus._consumers[group_name] = {
+            "consume_tasks": [],  # Empty list
+            "reclaim_tasks": [],  # Empty list
+        }
+
+        # Should not raise error
+        await bus.unsubscribe("test.topic", "test-agent")
+
+        assert group_name not in bus._consumers
+
+    @pytest.mark.asyncio
+    async def test_unsubscribe_handles_missing_task_keys(self):
+        """Test unsubscribe handles missing consume_tasks/reclaim_tasks keys."""
+        bus = RedisStreamEventBus(redis_url="redis://localhost:6379")
+        mock_redis = AsyncMock()
+        bus._redis = mock_redis
+
+        group_name = "group:test.topic:test-agent"
+        bus._consumers[group_name] = {
+            # Missing consume_tasks and reclaim_tasks keys
+            "topic": "test.topic",
+            "agent_name": "test-agent",
+        }
+
+        # Should not raise error
+        await bus.unsubscribe("test.topic", "test-agent")
+
+        assert group_name not in bus._consumers
+
+    @pytest.mark.asyncio
+    async def test_unsubscribe_handles_already_cancelled_tasks(self):
+        """Test unsubscribe safely handles already cancelled tasks."""
+        bus = RedisStreamEventBus(redis_url="redis://localhost:6379")
+        mock_redis = AsyncMock()
+        bus._redis = mock_redis
+
+        # Create and immediately cancel a task
+        task1 = asyncio.create_task(asyncio.sleep(100))
+        task2 = asyncio.create_task(asyncio.sleep(100))
+        task1.cancel()
+        task2.cancel()
+
+        # Wait a bit for cancellation to propagate
+        await asyncio.sleep(0.01)
+
+        group_name = "group:test.topic:test-agent"
+        bus._consumers[group_name] = {
+            "consume_tasks": [task1],
+            "reclaim_tasks": [task2],
+        }
+
+        # Should not raise error when canceling already-cancelled tasks
+        await bus.unsubscribe("test.topic", "test-agent")
+
+        assert group_name not in bus._consumers
+        # Tasks should be cancelled or in cancelling state
+        assert task1.cancelled() or task1.cancelling()
+        assert task2.cancelled() or task2.cancelling()
+
+    @pytest.mark.asyncio
+    async def test_unsubscribe_handles_already_done_tasks(self):
+        """Test unsubscribe safely handles already completed tasks."""
+        bus = RedisStreamEventBus(redis_url="redis://localhost:6379")
+        mock_redis = AsyncMock()
+        bus._redis = mock_redis
+
+        # Create tasks that complete immediately
+        async def quick_task():
+            return "done"
+
+        task1 = asyncio.create_task(quick_task())
+        task2 = asyncio.create_task(quick_task())
+        await asyncio.sleep(0.01)  # Let tasks complete
+
+        group_name = "group:test.topic:test-agent"
+        bus._consumers[group_name] = {
+            "consume_tasks": [task1],
+            "reclaim_tasks": [task2],
+        }
+
+        # Should not raise error when canceling already-done tasks
+        await bus.unsubscribe("test.topic", "test-agent")
+
+        assert group_name not in bus._consumers
+        assert task1.done()
+        assert task2.done()
+
+    @pytest.mark.asyncio
+    async def test_unsubscribe_auto_connects_if_not_connected(self):
+        """Test unsubscribe auto-connects if Redis not connected."""
+        bus = RedisStreamEventBus(redis_url="redis://localhost:6379")
+        bus._redis = None  # Not connected
+
+        mock_redis = AsyncMock()
+        with patch(
+            "omnidaemon.event_bus.redis_stream_bus.aioredis.from_url",
+            return_value=mock_redis,
+        ):
+            group_name = "group:test.topic:test-agent"
+            bus._consumers[group_name] = {"consume_tasks": [], "reclaim_tasks": []}
+
+            await bus.unsubscribe("test.topic", "test-agent")
+
+            # Should have connected
+            assert bus._redis is not None
+
+    @pytest.mark.asyncio
+    async def test_unsubscribe_handles_non_nogroup_error(self):
+        """Test unsubscribe handles non-NOGROUP error from xgroup_destroy."""
+        bus = RedisStreamEventBus(redis_url="redis://localhost:6379")
+        mock_redis = AsyncMock()
+        mock_redis.xgroup_destroy = AsyncMock(side_effect=Exception("OTHER_ERROR"))
+        bus._redis = mock_redis
+
+        group_name = "group:test.topic:test-agent"
+        bus._consumers[group_name] = {"consume_tasks": [], "reclaim_tasks": []}
+
+        # Should not raise exception, but should log error
+        await bus.unsubscribe("test.topic", "test-agent", delete_group=True)
+
+        mock_redis.xgroup_destroy.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_unsubscribe_handles_dlq_delete_error(self):
+        """Test unsubscribe handles DLQ delete errors."""
+        bus = RedisStreamEventBus(redis_url="redis://localhost:6379")
+        mock_redis = AsyncMock()
+        mock_redis.delete = AsyncMock(side_effect=Exception("Delete failed"))
+        bus._redis = mock_redis
+
+        group_name = "group:test.topic:test-agent"
+        bus._consumers[group_name] = {"consume_tasks": [], "reclaim_tasks": []}
+
+        # Should not raise exception
+        await bus.unsubscribe("test.topic", "test-agent", delete_dlq=True)
+
+        mock_redis.delete.assert_called_once()
+
 
 class TestRedisStreamEventBusGetConsumers:
     """Test suite for RedisStreamEventBus get_consumers operations."""
@@ -2592,6 +4435,25 @@ class TestRedisStreamEventBusGetConsumers:
 
         assert isinstance(consumers, dict)
 
+    @pytest.mark.asyncio
+    async def test_get_consumers_auto_connects_if_not_connected(self):
+        """Test get_consumers auto-connects if Redis not connected."""
+        bus = RedisStreamEventBus(redis_url="redis://localhost:6379")
+        bus._redis = None  # Not connected
+
+        mock_redis = AsyncMock()
+        mock_redis.scan = AsyncMock(return_value=(0, []))
+
+        with patch(
+            "omnidaemon.event_bus.redis_stream_bus.aioredis.from_url",
+            return_value=mock_redis,
+        ):
+            consumers = await bus.get_consumers()
+
+            # Should have connected
+            assert bus._redis is not None
+            assert isinstance(consumers, dict)
+
 
 class TestRedisStreamEventBusMonitorEmit:
     """Test suite for RedisStreamEventBus monitor emit operations."""
@@ -2653,3 +4515,16 @@ class TestRedisStreamEventBusMonitorEmit:
         call_args = mock_redis.xadd.call_args
         assert call_args[1]["maxlen"] == 1_000_000
         assert call_args[1]["approximate"] is True
+
+    @pytest.mark.asyncio
+    async def test_emit_monitor_handles_redis_not_connected(self):
+        """Test emit_monitor handles Redis not connected."""
+        bus = RedisStreamEventBus(redis_url="redis://localhost:6379")
+        bus._redis = None  # Not connected
+
+        metric = {"topic": "test.topic", "event": "processed"}
+
+        # Should not raise exception
+        await bus._emit_monitor(metric)
+
+        # Should return early without error

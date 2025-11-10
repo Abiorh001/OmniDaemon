@@ -1929,3 +1929,408 @@ class TestOmniDaemonSDKStreamMonitoring:
 
         assert "redis_info" in stats
         assert stats["redis_info"]["used_memory_human"] == "2.3M"
+
+
+class TestOmniDaemonSDKEdgeCases:
+    """Test suite for OmniDaemonSDK edge cases and error handling."""
+
+    @pytest.mark.asyncio
+    async def test_publish_task_validation_error_logs(self):
+        """Test publish_task logs ValidationError (lines 112-113)."""
+        mock_bus = AsyncMock()
+        mock_store = AsyncMock()
+        sdk = OmniDaemonSDK(event_bus=mock_bus, store=mock_store)
+
+        # Create invalid event that will raise ValidationError
+        with pytest.raises(ValidationError):
+            # Missing required topic
+            event = EventEnvelope(payload=PayloadBase(content="test"))
+            await sdk.publish_task(event)
+
+    @pytest.mark.asyncio
+    async def test_register_agent_with_none_config(self):
+        """Test register_agent with config=None (line 147)."""
+        mock_bus = AsyncMock()
+        mock_store = AsyncMock()
+        sdk = OmniDaemonSDK(event_bus=mock_bus, store=mock_store)
+        sdk.runner.register_handler = AsyncMock()
+
+        async def callback(msg):
+            return "result"
+
+        agent_config = AgentConfig(
+            name="test-agent", topic="test.topic", callback=callback, config=None
+        )
+
+        await sdk.register_agent(agent_config)
+
+        call_args = sdk.runner.register_handler.call_args
+        subscription = call_args[1]["subscription"]
+        assert subscription["config"] == {}  # Should be empty dict when config is None
+
+    @pytest.mark.asyncio
+    async def test_register_agent_validation_error_logs(self):
+        """Test register_agent logs ValidationError (lines 164-165)."""
+        mock_bus = AsyncMock()
+        mock_store = AsyncMock()
+        sdk = OmniDaemonSDK(event_bus=mock_bus, store=mock_store)
+
+        # Create invalid agent config that will raise ValidationError
+        with pytest.raises(ValidationError):
+            agent_config = AgentConfig(
+                name="test-agent",
+                # Missing required topic
+                callback=lambda x: x,
+            )
+            await sdk.register_agent(agent_config)
+
+    @pytest.mark.asyncio
+    async def test_delete_agent_handles_unsubscribe_error(self):
+        """Test delete_agent handles unsubscribe exception (lines 276-277)."""
+        mock_bus = AsyncMock()
+        mock_store = AsyncMock()
+        mock_bus.unsubscribe = AsyncMock(side_effect=Exception("Unsubscribe failed"))
+        mock_store.delete_agent = AsyncMock(return_value=True)
+
+        sdk = OmniDaemonSDK(event_bus=mock_bus, store=mock_store)
+
+        # Should not raise, but continue to delete from storage
+        result = await sdk.delete_agent("test.topic", "test-agent")
+
+        assert result is True
+        mock_store.delete_agent.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_health_handles_get_consumers_exception(self):
+        """Test health handles get_consumers exception (lines 353-358)."""
+        mock_bus = AsyncMock()
+        mock_store = AsyncMock()
+        mock_store.list_all_agents = AsyncMock(return_value={})
+        mock_store.get_config = AsyncMock(return_value=None)
+        mock_store.health_check = AsyncMock(return_value={"status": "healthy"})
+        mock_bus.get_consumers = AsyncMock(
+            side_effect=Exception("Get consumers failed")
+        )
+
+        sdk = OmniDaemonSDK(event_bus=mock_bus, store=mock_store)
+        sdk.runner.event_bus = mock_bus
+
+        # Should not raise, but handle gracefully
+        health = await sdk.health()
+
+        assert health["has_active_consumers"] is False
+
+    @pytest.mark.asyncio
+    async def test_health_checks_task_in_consumers(self):
+        """Test health checks task in consumers (lines 352-356)."""
+        mock_bus = AsyncMock()
+        mock_store = AsyncMock()
+        mock_store.list_all_agents = AsyncMock(return_value={})
+        mock_store.get_config = AsyncMock(return_value=None)
+        mock_store.health_check = AsyncMock(return_value={"status": "healthy"})
+        # Return consumers with task but no consumers_count
+        mock_bus.get_consumers = AsyncMock(
+            return_value={
+                "group1": {"task": "some_task", "consumers_count": 0},
+                "group2": {"consumers_count": 0},
+            }
+        )
+
+        sdk = OmniDaemonSDK(event_bus=mock_bus, store=mock_store)
+        sdk.runner.event_bus = mock_bus
+
+        health = await sdk.health()
+
+        # Should detect active consumers via task field
+        assert health["has_active_consumers"] is True
+
+    @pytest.mark.asyncio
+    async def test_shutdown_handles_store_close_error(self):
+        """Test shutdown handles store.close exception (lines 487-488)."""
+        mock_bus = AsyncMock()
+        mock_bus.close = AsyncMock()
+        mock_store = AsyncMock()
+        mock_store.close = AsyncMock(side_effect=Exception("Store close failed"))
+        sdk = OmniDaemonSDK(event_bus=mock_bus, store=mock_store)
+        sdk.runner.stop = AsyncMock()
+
+        # Should not raise, but handle gracefully
+        await sdk.shutdown()
+
+        assert sdk._is_running is False
+        mock_store.close.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_metrics_skips_missing_topic_or_agent(self):
+        """Test metrics skips metrics with missing topic or agent (line 528)."""
+        mock_bus = AsyncMock()
+        mock_store = AsyncMock()
+        mock_store.get_metrics = AsyncMock(
+            return_value=[
+                {"topic": "topic1", "agent": "agent1", "event": "task_received"},
+                {
+                    "topic": None,
+                    "agent": "agent1",
+                    "event": "task_received",
+                },  # Missing topic
+                {
+                    "topic": "topic2",
+                    "agent": None,
+                    "event": "task_received",
+                },  # Missing agent
+                {"topic": "topic3", "agent": "agent3", "event": "task_received"},
+            ]
+        )
+
+        sdk = OmniDaemonSDK(event_bus=mock_bus, store=mock_store)
+
+        metrics = await sdk.metrics()
+
+        # Should only include metrics with both topic and agent
+        assert "topic1" in metrics
+        assert "topic3" in metrics
+        assert "topic2" not in metrics  # Missing agent, should be skipped
+
+    @pytest.mark.asyncio
+    async def test_list_streams_auto_connects(self):
+        """Test list_streams auto-connects if not connected (line 655)."""
+        mock_bus = AsyncMock()
+        mock_store = AsyncMock()
+        mock_redis = AsyncMock()
+        mock_redis.keys = AsyncMock(return_value=[])
+        mock_redis.xlen = AsyncMock()
+        mock_bus._redis = None  # Not connected
+        mock_bus.connect = AsyncMock()
+
+        sdk = OmniDaemonSDK(event_bus=mock_bus, store=mock_store)
+
+        # Set _redis after connect is called
+        def connect_side_effect():
+            mock_bus._redis = mock_redis
+
+        mock_bus.connect.side_effect = connect_side_effect
+
+        await sdk.list_streams()
+
+        mock_bus.connect.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_inspect_stream_raises_for_non_redis(self):
+        """Test inspect_stream raises ValueError for non-Redis bus (line 684)."""
+        mock_bus = AsyncMock()
+        mock_store = AsyncMock()
+        # Remove _redis attribute
+        if hasattr(mock_bus, "_redis"):
+            delattr(mock_bus, "_redis")
+
+        sdk = OmniDaemonSDK(event_bus=mock_bus, store=mock_store)
+
+        with pytest.raises(
+            ValueError, match="Event bus monitoring only works with Redis Streams"
+        ):
+            await sdk.inspect_stream("test.topic")
+
+    @pytest.mark.asyncio
+    async def test_inspect_stream_auto_connects(self):
+        """Test inspect_stream auto-connects if not connected (line 687)."""
+        mock_bus = AsyncMock()
+        mock_store = AsyncMock()
+        mock_redis = AsyncMock()
+        mock_redis.xrevrange = AsyncMock(return_value=[])
+        mock_bus._redis = None  # Not connected
+        mock_bus.connect = AsyncMock()
+
+        sdk = OmniDaemonSDK(event_bus=mock_bus, store=mock_store)
+
+        # Set _redis after connect is called
+        def connect_side_effect():
+            mock_bus._redis = mock_redis
+
+        mock_bus.connect.side_effect = connect_side_effect
+
+        await sdk.inspect_stream("test.topic")
+
+        mock_bus.connect.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_inspect_stream_handles_json_decode_error(self):
+        """Test inspect_stream handles JSON decode errors (lines 705-706)."""
+        mock_bus = AsyncMock()
+        mock_store = AsyncMock()
+        mock_redis = AsyncMock()
+        mock_redis.xrevrange = AsyncMock(
+            return_value=[
+                (b"123-0", {b"data": b"invalid json"}),
+                (b"124-0", {b"data": b'{"valid": "json"}'}),
+            ]
+        )
+        mock_bus._redis = mock_redis
+        mock_bus.connect = AsyncMock()
+
+        sdk = OmniDaemonSDK(event_bus=mock_bus, store=mock_store)
+
+        messages = await sdk.inspect_stream("test.topic")
+
+        # Should handle invalid JSON gracefully
+        assert len(messages) == 2
+        # Invalid JSON should be returned as string
+        assert isinstance(messages[0]["data"], str)
+        # Valid JSON should be parsed
+        assert isinstance(messages[1]["data"], dict)
+
+    @pytest.mark.asyncio
+    async def test_list_groups_auto_connects(self):
+        """Test list_groups auto-connects if not connected (line 729)."""
+        mock_bus = AsyncMock()
+        mock_store = AsyncMock()
+        mock_redis = AsyncMock()
+        mock_redis.xinfo_groups = AsyncMock(return_value=[])
+        mock_bus._redis = None  # Not connected
+        mock_bus.connect = AsyncMock()
+
+        sdk = OmniDaemonSDK(event_bus=mock_bus, store=mock_store)
+
+        # Set _redis after connect is called
+        def connect_side_effect():
+            mock_bus._redis = mock_redis
+
+        mock_bus.connect.side_effect = connect_side_effect
+
+        await sdk.list_groups("test.topic")
+
+        mock_bus.connect.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_list_groups_handles_xinfo_error(self):
+        """Test list_groups handles xinfo_groups exception (lines 737-739)."""
+        mock_bus = AsyncMock()
+        mock_store = AsyncMock()
+        mock_redis = AsyncMock()
+        mock_redis.xinfo_groups = AsyncMock(side_effect=Exception("XINFO failed"))
+        mock_bus._redis = mock_redis
+        mock_bus.connect = AsyncMock()
+
+        sdk = OmniDaemonSDK(event_bus=mock_bus, store=mock_store)
+
+        groups = await sdk.list_groups("test.topic")
+
+        # Should return empty list on error
+        assert groups == []
+
+    @pytest.mark.asyncio
+    async def test_inspect_dlq_auto_connects(self):
+        """Test inspect_dlq auto-connects if not connected (line 779)."""
+        mock_bus = AsyncMock()
+        mock_store = AsyncMock()
+        mock_redis = AsyncMock()
+        mock_redis.keys = AsyncMock(return_value=[])
+        mock_bus._redis = None  # Not connected
+        mock_bus.connect = AsyncMock()
+
+        sdk = OmniDaemonSDK(event_bus=mock_bus, store=mock_store)
+
+        # Set _redis after connect is called
+        def connect_side_effect():
+            mock_bus._redis = mock_redis
+
+        mock_bus.connect.side_effect = connect_side_effect
+
+        await sdk.inspect_dlq("test.topic")
+
+        mock_bus.connect.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_get_bus_stats_auto_connects(self):
+        """Test get_bus_stats auto-connects if not connected (line 812)."""
+        mock_bus = AsyncMock()
+        mock_store = AsyncMock()
+        mock_redis = AsyncMock()
+        mock_redis.keys = AsyncMock(return_value=[])
+        mock_redis.info = AsyncMock(return_value={"used_memory_human": "1M"})
+        mock_bus._redis = None  # Not connected
+        mock_bus.connect = AsyncMock()
+
+        sdk = OmniDaemonSDK(event_bus=mock_bus, store=mock_store)
+
+        # Set _redis after connect is called
+        def connect_side_effect():
+            mock_bus._redis = mock_redis
+
+        mock_bus.connect.side_effect = connect_side_effect
+
+        await sdk.get_bus_stats()
+
+        mock_bus.connect.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_get_bus_stats_handles_xinfo_error(self):
+        """Test get_bus_stats handles xinfo_groups exception (lines 858-859)."""
+        mock_bus = AsyncMock()
+        mock_store = AsyncMock()
+        mock_redis = AsyncMock()
+        mock_redis.keys = AsyncMock(return_value=[b"omni-stream:topic1"])
+        mock_redis.xlen = AsyncMock(return_value=10)
+        mock_redis.xinfo_groups = AsyncMock(side_effect=Exception("XINFO failed"))
+        mock_redis.info = AsyncMock(return_value={"used_memory_human": "1M"})
+        mock_bus._redis = mock_redis
+        mock_bus.connect = AsyncMock()
+
+        sdk = OmniDaemonSDK(event_bus=mock_bus, store=mock_store)
+
+        stats = await sdk.get_bus_stats()
+
+        # Should handle error gracefully
+        assert "topic1" in stats["snapshot"]["topics"]
+        assert stats["snapshot"]["topics"]["topic1"]["groups"] == []
+
+    @pytest.mark.asyncio
+    async def test_get_bus_stats_handles_dlq_error(self):
+        """Test get_bus_stats handles DLQ xlen exception (lines 843-847)."""
+        mock_bus = AsyncMock()
+        mock_store = AsyncMock()
+        mock_redis = AsyncMock()
+        mock_redis.keys = AsyncMock(return_value=[b"omni-stream:topic1"])
+        mock_redis.xlen = AsyncMock(
+            side_effect=[10, Exception("DLQ xlen failed")]
+        )  # Stream length, then DLQ error
+        mock_redis.xinfo_groups = AsyncMock(
+            return_value=[
+                {
+                    "name": b"group1",
+                    "consumers": 1,
+                    "pending": 0,
+                    "last-delivered-id": b"123-0",
+                }
+            ]
+        )
+        mock_redis.info = AsyncMock(return_value={"used_memory_human": "1M"})
+        mock_bus._redis = mock_redis
+        mock_bus.connect = AsyncMock()
+
+        sdk = OmniDaemonSDK(event_bus=mock_bus, store=mock_store)
+
+        stats = await sdk.get_bus_stats()
+
+        # Should handle DLQ error gracefully
+        assert "topic1" in stats["snapshot"]["topics"]
+        groups = stats["snapshot"]["topics"]["topic1"]["groups"]
+        assert len(groups) == 1
+        assert groups[0]["dlq"] == 0  # Should default to 0 on error
+
+    @pytest.mark.asyncio
+    async def test_get_bus_stats_handles_redis_info_error(self):
+        """Test get_bus_stats handles redis.info exception (lines 873-874)."""
+        mock_bus = AsyncMock()
+        mock_store = AsyncMock()
+        mock_redis = AsyncMock()
+        mock_redis.keys = AsyncMock(return_value=[])
+        mock_redis.info = AsyncMock(side_effect=Exception("Redis info failed"))
+        mock_bus._redis = mock_redis
+        mock_bus.connect = AsyncMock()
+
+        sdk = OmniDaemonSDK(event_bus=mock_bus, store=mock_store)
+
+        stats = await sdk.get_bus_stats()
+
+        # Should handle error gracefully and use default
+        assert stats["redis_info"]["used_memory_human"] == "-"

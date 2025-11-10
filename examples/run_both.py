@@ -1,10 +1,10 @@
 import asyncio
 import logging
 from decouple import config
-from examples.omnicoreagent.agent_runner import (
+from omnicoreagent_dir.agent_runner import (
     call_file_system_agent as call_file_system_agent_omnicoreagent,
 )
-from examples.google_adk.agent_runner import (
+from google_adk.agent_runner import (
     call_file_system_agent as call_file_system_agent_google_adk,
 )
 from omnidaemon import AgentConfig, SubscriptionConfig, OmniDaemonSDK, start_api_server

@@ -48,6 +48,10 @@ class OmniDaemonSDK:
     ) -> None:
         self.event_bus = event_bus or default_event_bus
         self.store = store or default_store
+
+        if hasattr(self.event_bus, "_store") and self.event_bus._store is None:
+            self.event_bus._store = self.store
+
         self.runner = BaseAgentRunner(
             event_bus=self.event_bus,
             store=self.store,

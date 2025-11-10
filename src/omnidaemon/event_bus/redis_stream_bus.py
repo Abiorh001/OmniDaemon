@@ -5,6 +5,7 @@ import time
 from typing import Optional, Callable, Dict, Any
 from redis import asyncio as aioredis
 from decouple import config
+from omnidaemon.storage.base import BaseStore
 
 logger = logging.getLogger("redis_stream_bus")
 logger.setLevel(logging.INFO)
@@ -31,6 +32,7 @@ class RedisStreamEventBus:
         reclaim_interval: Seconds between reclaim attempts (default: 30)
         default_reclaim_idle_ms: Milliseconds before a pending message is reclaimed (default: 180,000)
         default_dlq_retry_limit: Maximum retry attempts before sending to DLQ (default: 3)
+        store: Optional storage instance for cross-process subscription coordination
 
     Attributes:
         redis_url: Redis connection URL
@@ -38,6 +40,7 @@ class RedisStreamEventBus:
         reclaim_interval: Reclaim loop interval in seconds
         default_reclaim_idle_ms: Default idle time before reclaim
         default_dlq_retry_limit: Default DLQ retry limit
+        _store: Storage instance for subscription flags
         _redis: Redis client instance
         _connect_lock: Lock for connection operations
         _consumers: Dictionary of active consumer groups
@@ -52,12 +55,14 @@ class RedisStreamEventBus:
         reclaim_interval: int = 30,
         default_reclaim_idle_ms: int = 180_000,
         default_dlq_retry_limit: int = 3,
+        store: Optional[BaseStore] = None,
     ) -> None:
         self.redis_url = redis_url
         self.default_maxlen = default_maxlen
         self.reclaim_interval = reclaim_interval
         self.default_reclaim_idle_ms = default_reclaim_idle_ms
         self.default_dlq_retry_limit = default_dlq_retry_limit
+        self._store = store
 
         self._redis: Optional[aioredis.Redis] = None
         self._connect_lock = asyncio.Lock()
@@ -137,7 +142,7 @@ class RedisStreamEventBus:
         """
         if not self._redis:
             await self.connect()
-        assert self._redis is not None  # Type narrowing after connect
+        assert self._redis is not None
 
         topic = event_payload.get("topic")
         if not topic:
@@ -201,7 +206,7 @@ class RedisStreamEventBus:
         """
         if not self._redis:
             await self.connect()
-        assert self._redis is not None  # Type narrowing after connect
+        assert self._redis is not None
 
         reclaim_idle_ms = config.get("reclaim_idle_ms")
         dlq_retry_limit = config.get("dlq_retry_limit")
@@ -222,6 +227,16 @@ class RedisStreamEventBus:
                 logger.debug(f"[RedisStreamBus] group {group} exists")
             else:
                 raise
+
+        subscription_key = f"_subscription_active:{group}"
+        if self._store:
+            try:
+                await self._store.save_config(subscription_key, True)
+                logger.debug(
+                    f"[RedisStreamBus] Marked subscription {group} as active in storage"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to mark subscription active in storage: {e}")
 
         self._running = True
         consume_tasks = []
@@ -265,7 +280,6 @@ class RedisStreamEventBus:
             "consume_tasks": consume_tasks,
             "reclaim_tasks": reclaim_tasks,
         }
-
         logger.info(
             f"[RedisStreamBus] subscribed topic={topic} group={group} consumers={consumer_count}"
         )
@@ -303,10 +317,25 @@ class RedisStreamEventBus:
         )
         if not self._redis:
             await self.connect()
-        assert self._redis is not None  # Type narrowing after connect
+        assert self._redis is not None
+
+        subscription_key = f"_subscription_active:{group}"
 
         try:
             while self._running:
+                if self._store:
+                    try:
+                        is_active = await self._store.get_config(
+                            subscription_key, default=False
+                        )
+                        if not is_active:
+                            logger.info(
+                                f"[RedisStreamBus] Subscription {group} marked inactive, stopping consume loop"
+                            )
+                            break
+                    except Exception:
+                        pass
+
                 try:
                     entries = await self._redis.xreadgroup(
                         groupname=group,
@@ -359,6 +388,11 @@ class RedisStreamEventBus:
                     break
                 except Exception as err:
                     err_msg = str(err).lower()
+                    if "nogroup" in err_msg:
+                        logger.info(
+                            f"[RedisStreamBus] Consumer group {group} deleted, stopping consume loop"
+                        )
+                        break
                     if "connection closed" in err_msg or "connection reset" in err_msg:
                         logger.info(
                             f"[RedisStreamBus] connection closed for topic={topic}, stopping loop"
@@ -371,6 +405,13 @@ class RedisStreamEventBus:
                     await asyncio.sleep(1)
         finally:
             logger.info(f"[RedisStreamBus] consumer loop stopped topic={topic}")
+
+            if group in self._consumers:
+                meta = self._consumers[group]
+                if "consume_tasks" in meta:
+                    meta["consume_tasks"] = [
+                        t for t in meta["consume_tasks"] if not t.done()
+                    ]
 
     async def _reclaim_loop(
         self,
@@ -407,13 +448,27 @@ class RedisStreamEventBus:
         logger.info(f"[RedisStreamBus] reclaim loop start topic={topic} group={group}")
         if not self._redis:
             await self.connect()
-        assert self._redis is not None  # Type narrowing after connect
+        assert self._redis is not None
 
         retry_key = f"retry_counts:{group}"
         reclaim_idle_ms = reclaim_idle_ms or self.default_reclaim_idle_ms
         dlq_retry_limit = dlq_retry_limit or self.default_dlq_retry_limit
+        subscription_key = f"_subscription_active:{group}"
 
         while self._running:
+            if self._store:
+                try:
+                    is_active = await self._store.get_config(
+                        subscription_key, default=False
+                    )
+                    if not is_active:
+                        logger.info(
+                            f"[RedisStreamBus] Subscription {group} marked inactive, stopping reclaim loop"
+                        )
+                        break
+                except Exception:
+                    pass
+
             try:
                 pending = []
                 try:
@@ -559,6 +614,12 @@ class RedisStreamEventBus:
                 break
             except Exception as e:
                 err_msg = str(e).lower()
+
+                if "nogroup" in err_msg:
+                    logger.info(
+                        f"[RedisStreamBus] Consumer group {group} deleted, stopping reclaim loop"
+                    )
+                    break
                 if "connection closed" in err_msg or "connection reset" in err_msg:
                     logger.info(
                         f"[RedisStreamBus] connection closed in reclaim loop topic={topic}, stopping"
@@ -569,6 +630,13 @@ class RedisStreamEventBus:
                 await asyncio.sleep(self.reclaim_interval)
 
         logger.info(f"[RedisStreamBus] reclaim loop stopped topic={topic}")
+
+        if group in self._consumers:
+            meta = self._consumers[group]
+            if "reclaim_tasks" in meta:
+                meta["reclaim_tasks"] = [
+                    t for t in meta["reclaim_tasks"] if not t.done()
+                ]
 
     async def _send_to_dlq(
         self,
@@ -646,7 +714,7 @@ class RedisStreamEventBus:
             Failures to emit metrics are logged but don't raise exceptions.
         """
         if not self._redis:
-            return  # Silently fail if not connected
+            return
         try:
             await self._redis.xadd(
                 "omni-metrics",
@@ -684,40 +752,56 @@ class RedisStreamEventBus:
         """
         if not self._redis:
             await self.connect()
-        assert self._redis is not None  # Type narrowing after connect
+        assert self._redis is not None
 
         group_name = f"group:{topic}:{agent_name}"
 
         stream_name = f"omni-stream:{topic}"
         dlq_name = f"omni-dlq:{group_name}"
 
-        meta = self._consumers.get(group_name)
-        if not meta:
-            return
+        subscription_key = f"_subscription_active:{group_name}"
+        if self._store:
+            try:
+                await self._store.save_config(subscription_key, False)
+                logger.info(
+                    f"[RedisStreamBus] Marked subscription {group_name} as inactive in storage"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to mark subscription inactive in storage: {e}")
 
-        for task in meta["consume_tasks"]:
-            task.cancel()
-        for task in meta["reclaim_tasks"]:
-            task.cancel()
-
-        del self._consumers[group_name]
-
-        logger.info(f"[RedisStreamBus] Stopped consumption for {group_name}")
+        if group_name in self._consumers:
+            consumer_meta = self._consumers[group_name]
+            # Cancel all consume and reclaim tasks
+            consume_tasks = consumer_meta.get("consume_tasks", [])
+            reclaim_tasks = consumer_meta.get("reclaim_tasks", [])
+            for task in consume_tasks + reclaim_tasks:
+                task.cancel()
+            del self._consumers[group_name]
+            logger.debug(
+                f"[RedisStreamBus] Removed {group_name} from local _consumers tracking"
+            )
 
         if delete_group:
             try:
-                await self._redis.xgroup_destroy(stream_name, group_name)
+                await self._redis.xgroup_destroy(stream_name, group_name)  # type: ignore[misc]
                 logger.info(f"[RedisStreamBus] Deleted consumer group {group_name}")
             except Exception as e:
-                if "NOGROUP" not in str(e):
-                    logger.error(f"Failed to delete group: {e}")
+                error_str = str(e)
+                if "NOGROUP" not in error_str:
+                    logger.error(
+                        f"Failed to delete consumer group {group_name} from Redis: {e}"
+                    )
+                else:
+                    logger.debug(
+                        f"Consumer group {group_name} already deleted or doesn't exist"
+                    )
 
         if delete_dlq:
             try:
-                await self._redis.delete(dlq_name)
+                await self._redis.delete(dlq_name)  # type: ignore[misc]
                 logger.info(f"[RedisStreamBus] Deleted DLQ {dlq_name}")
             except Exception as e:
-                logger.warning(f"Failed to delete DLQ: {e}")
+                logger.warning(f"Failed to delete DLQ {dlq_name}: {e}")
         else:
             logger.info(f"[RedisStreamBus] DLQ preserved at {dlq_name}")
 
@@ -743,7 +827,7 @@ class RedisStreamEventBus:
         """
         if not self._redis:
             await self.connect()
-        assert self._redis is not None  # Type narrowing after connect
+        assert self._redis is not None
 
         if self._consumers:
             return self._consumers

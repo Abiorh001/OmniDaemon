@@ -929,3 +929,400 @@ class TestRedisStoreKeyPrefix:
         assert "agents" in key
         assert "topic1" in key
         assert "agent1" in key
+
+
+class TestRedisStoreAutoConnect:
+    """Test suite for RedisStore auto-connect functionality."""
+
+    @pytest.mark.asyncio
+    async def test_health_check_auto_connects(self, mock_redis):
+        """Test health_check auto-connects if not connected (line 131)."""
+        with patch("omnidaemon.storage.redis_store.aioredis") as mock_aioredis:
+            mock_aioredis.from_url = AsyncMock(return_value=mock_redis)
+            store = RedisStore(redis_url="redis://localhost:6379")
+            store._redis = None  # Not connected
+
+            await store.health_check()
+
+            # Should have connected
+            assert store._redis is not None
+            assert store._connected is True
+
+    @pytest.mark.asyncio
+    async def test_add_agent_auto_connects(self, mock_redis):
+        """Test add_agent auto-connects if not connected (line 174)."""
+        with patch("omnidaemon.storage.redis_store.aioredis") as mock_aioredis:
+            mock_aioredis.from_url = AsyncMock(return_value=mock_redis)
+            store = RedisStore(redis_url="redis://localhost:6379")
+            store._redis = None  # Not connected
+
+            mock_pipeline = MockPipeline()
+            mock_redis.pipeline = MagicMock(return_value=mock_pipeline)
+
+            await store.add_agent("test.topic", {"name": "test-agent"})
+
+            # Should have connected
+            assert store._redis is not None
+
+    @pytest.mark.asyncio
+    async def test_get_agent_auto_connects(self, mock_redis):
+        """Test get_agent auto-connects if not connected (line 211)."""
+        with patch("omnidaemon.storage.redis_store.aioredis") as mock_aioredis:
+            mock_aioredis.from_url = AsyncMock(return_value=mock_redis)
+            store = RedisStore(redis_url="redis://localhost:6379")
+            store._redis = None  # Not connected
+
+            mock_redis.hgetall = AsyncMock(return_value={})
+
+            await store.get_agent("test.topic", "test-agent")
+
+            # Should have connected
+            assert store._redis is not None
+
+    @pytest.mark.asyncio
+    async def test_get_agents_by_topic_auto_connects(self, mock_redis):
+        """Test get_agents_by_topic auto-connects if not connected (line 240)."""
+        with patch("omnidaemon.storage.redis_store.aioredis") as mock_aioredis:
+            mock_aioredis.from_url = AsyncMock(return_value=mock_redis)
+            store = RedisStore(redis_url="redis://localhost:6379")
+            store._redis = None  # Not connected
+
+            mock_redis.smembers = AsyncMock(return_value=set())
+
+            await store.get_agents_by_topic("test.topic")
+
+            # Should have connected
+            assert store._redis is not None
+
+    @pytest.mark.asyncio
+    async def test_list_all_agents_auto_connects(self, mock_redis):
+        """Test list_all_agents auto-connects if not connected (line 264)."""
+        with patch("omnidaemon.storage.redis_store.aioredis") as mock_aioredis:
+            mock_aioredis.from_url = AsyncMock(return_value=mock_redis)
+            store = RedisStore(redis_url="redis://localhost:6379")
+            store._redis = None  # Not connected
+
+            mock_redis.smembers = AsyncMock(return_value=set())
+
+            await store.list_all_agents()
+
+            # Should have connected
+            assert store._redis is not None
+
+    @pytest.mark.asyncio
+    async def test_delete_agent_auto_connects(self, mock_redis):
+        """Test delete_agent auto-connects if not connected (line 283)."""
+        with patch("omnidaemon.storage.redis_store.aioredis") as mock_aioredis:
+            mock_aioredis.from_url = AsyncMock(return_value=mock_redis)
+            store = RedisStore(redis_url="redis://localhost:6379")
+            store._redis = None  # Not connected
+
+            mock_pipeline = MockPipeline()
+            mock_redis.pipeline = MagicMock(return_value=mock_pipeline)
+            mock_redis.scard = AsyncMock(return_value=1)
+
+            await store.delete_agent("test.topic", "test-agent")
+
+            # Should have connected
+            assert store._redis is not None
+
+    @pytest.mark.asyncio
+    async def test_delete_topic_auto_connects(self, mock_redis):
+        """Test delete_topic auto-connects if not connected (line 303)."""
+        with patch("omnidaemon.storage.redis_store.aioredis") as mock_aioredis:
+            mock_aioredis.from_url = AsyncMock(return_value=mock_redis)
+            store = RedisStore(redis_url="redis://localhost:6379")
+            store._redis = None  # Not connected
+
+            mock_redis.smembers = AsyncMock(return_value=set())
+
+            await store.delete_topic("test.topic")
+
+            # Should have connected
+            assert store._redis is not None
+
+    @pytest.mark.asyncio
+    async def test_save_result_auto_connects(self, mock_redis):
+        """Test save_result auto-connects if not connected (line 342)."""
+        with patch("omnidaemon.storage.redis_store.aioredis") as mock_aioredis:
+            mock_aioredis.from_url = AsyncMock(return_value=mock_redis)
+            store = RedisStore(redis_url="redis://localhost:6379")
+            store._redis = None  # Not connected
+
+            mock_redis.set = AsyncMock()
+            mock_redis.zadd = AsyncMock()
+
+            await store.save_result("task-1", {"result": "data"})
+
+            # Should have connected
+            assert store._redis is not None
+
+    @pytest.mark.asyncio
+    async def test_get_result_auto_connects(self, mock_redis):
+        """Test get_result auto-connects if not connected (line 375)."""
+        with patch("omnidaemon.storage.redis_store.aioredis") as mock_aioredis:
+            mock_aioredis.from_url = AsyncMock(return_value=mock_redis)
+            store = RedisStore(redis_url="redis://localhost:6379")
+            store._redis = None  # Not connected
+
+            mock_redis.get = AsyncMock(return_value=None)
+
+            await store.get_result("task-1")
+
+            # Should have connected
+            assert store._redis is not None
+
+    @pytest.mark.asyncio
+    async def test_delete_result_auto_connects(self, mock_redis):
+        """Test delete_result auto-connects if not connected (line 391)."""
+        with patch("omnidaemon.storage.redis_store.aioredis") as mock_aioredis:
+            mock_aioredis.from_url = AsyncMock(return_value=mock_redis)
+            store = RedisStore(redis_url="redis://localhost:6379")
+            store._redis = None  # Not connected
+
+            mock_pipeline = MockPipeline()
+            mock_redis.pipeline = MagicMock(return_value=mock_pipeline)
+
+            await store.delete_result("task-1")
+
+            # Should have connected
+            assert store._redis is not None
+
+    @pytest.mark.asyncio
+    async def test_list_results_auto_connects(self, mock_redis):
+        """Test list_results auto-connects if not connected (line 406)."""
+        with patch("omnidaemon.storage.redis_store.aioredis") as mock_aioredis:
+            mock_aioredis.from_url = AsyncMock(return_value=mock_redis)
+            store = RedisStore(redis_url="redis://localhost:6379")
+            store._redis = None  # Not connected
+
+            mock_redis.zrevrange = AsyncMock(return_value=[])
+
+            await store.list_results()
+
+            # Should have connected
+            assert store._redis is not None
+
+    @pytest.mark.asyncio
+    async def test_list_results_returns_empty_when_no_task_ids(self, store, mock_redis):
+        """Test list_results returns empty list when no task_ids (line 414)."""
+        mock_redis.zrevrange = AsyncMock(return_value=[])
+
+        results = await store.list_results()
+
+        assert results == []
+
+    @pytest.mark.asyncio
+    async def test_save_metric_auto_connects(self, mock_redis):
+        """Test save_metric auto-connects if not connected (line 441)."""
+        with patch("omnidaemon.storage.redis_store.aioredis") as mock_aioredis:
+            mock_aioredis.from_url = AsyncMock(return_value=mock_redis)
+            store = RedisStore(redis_url="redis://localhost:6379")
+            store._redis = None  # Not connected
+
+            mock_redis.xadd = AsyncMock(return_value="1234567890-0")
+
+            await store.save_metric({"topic": "test.topic", "event": "processed"})
+
+            # Should have connected
+            assert store._redis is not None
+
+    @pytest.mark.asyncio
+    async def test_get_metrics_auto_connects(self, mock_redis):
+        """Test get_metrics auto-connects if not connected (line 471)."""
+        with patch("omnidaemon.storage.redis_store.aioredis") as mock_aioredis:
+            mock_aioredis.from_url = AsyncMock(return_value=mock_redis)
+            store = RedisStore(redis_url="redis://localhost:6379")
+            store._redis = None  # Not connected
+
+            mock_redis.xrevrange = AsyncMock(return_value=[])
+
+            await store.get_metrics()
+
+            # Should have connected
+            assert store._redis is not None
+
+    @pytest.mark.asyncio
+    async def test_get_metrics_filters_by_topic(self, store, mock_redis):
+        """Test get_metrics filters by topic (line 484)."""
+        mock_redis.xrevrange = AsyncMock(
+            return_value=[
+                (
+                    "1234567890-0",
+                    {"data": json.dumps({"topic": "topic1", "event": "test1"})},
+                ),
+                (
+                    "1234567891-0",
+                    {"data": json.dumps({"topic": "topic2", "event": "test2"})},
+                ),
+            ]
+        )
+
+        metrics = await store.get_metrics(topic="topic1")
+
+        # Should only return metrics for topic1
+        assert all(m.get("topic") == "topic1" for m in metrics)
+
+    @pytest.mark.asyncio
+    async def test_save_config_auto_connects(self, mock_redis):
+        """Test save_config auto-connects if not connected (line 502)."""
+        with patch("omnidaemon.storage.redis_store.aioredis") as mock_aioredis:
+            mock_aioredis.from_url = AsyncMock(return_value=mock_redis)
+            store = RedisStore(redis_url="redis://localhost:6379")
+            store._redis = None  # Not connected
+
+            mock_redis.set = AsyncMock()
+
+            await store.save_config("key1", "value1")
+
+            # Should have connected
+            assert store._redis is not None
+
+    @pytest.mark.asyncio
+    async def test_get_config_auto_connects(self, mock_redis):
+        """Test get_config auto-connects if not connected (line 520)."""
+        with patch("omnidaemon.storage.redis_store.aioredis") as mock_aioredis:
+            mock_aioredis.from_url = AsyncMock(return_value=mock_redis)
+            store = RedisStore(redis_url="redis://localhost:6379")
+            store._redis = None  # Not connected
+
+            mock_redis.get = AsyncMock(return_value=None)
+
+            await store.get_config("key1")
+
+            # Should have connected
+            assert store._redis is not None
+
+    @pytest.mark.asyncio
+    async def test_get_config_handles_json_decode_error(self, store, mock_redis):
+        """Test get_config handles JSON decode errors (lines 531-532)."""
+        mock_redis.get = AsyncMock(return_value="invalid json")
+
+        value = await store.get_config("key1", default="default_value")
+
+        # Should return default on JSON decode error
+        assert value == "default_value"
+
+    @pytest.mark.asyncio
+    async def test_clear_agents_auto_connects(self, mock_redis):
+        """Test clear_agents auto-connects if not connected (line 537)."""
+        with patch("omnidaemon.storage.redis_store.aioredis") as mock_aioredis:
+            mock_aioredis.from_url = AsyncMock(return_value=mock_redis)
+            store = RedisStore(redis_url="redis://localhost:6379")
+            store._redis = None  # Not connected
+
+            mock_redis.scan_iter = MagicMock(return_value=MockAsyncIterator([]))
+            mock_redis.delete = AsyncMock()
+
+            await store.clear_agents()
+
+            # Should have connected
+            assert store._redis is not None
+
+    @pytest.mark.asyncio
+    async def test_clear_agents_deletes_topic_sets(self, store, mock_redis):
+        """Test clear_agents deletes topic sets (line 551)."""
+        mock_redis.scan_iter = MagicMock(
+            side_effect=[
+                MockAsyncIterator(["omni:agent:topic1:agent1"]),  # Agent keys
+                MockAsyncIterator(["omni:agents:topic:topic1"]),  # Topic sets
+            ]
+        )
+        mock_redis.delete = AsyncMock()
+
+        await store.clear_agents()
+
+        # Should delete topic sets
+        assert mock_redis.delete.call_count >= 2  # At least agent key and topic set
+
+    @pytest.mark.asyncio
+    async def test_clear_results_auto_connects(self, mock_redis):
+        """Test clear_results auto-connects if not connected (line 558)."""
+        with patch("omnidaemon.storage.redis_store.aioredis") as mock_aioredis:
+            mock_aioredis.from_url = AsyncMock(return_value=mock_redis)
+            store = RedisStore(redis_url="redis://localhost:6379")
+            store._redis = None  # Not connected
+
+            mock_redis.scan_iter = MagicMock(return_value=MockAsyncIterator([]))
+            mock_redis.delete = AsyncMock()
+
+            await store.clear_results()
+
+            # Should have connected
+            assert store._redis is not None
+
+    @pytest.mark.asyncio
+    async def test_clear_metrics_auto_connects(self, mock_redis):
+        """Test clear_metrics auto-connects if not connected (line 575)."""
+        with patch("omnidaemon.storage.redis_store.aioredis") as mock_aioredis:
+            mock_aioredis.from_url = AsyncMock(return_value=mock_redis)
+            store = RedisStore(redis_url="redis://localhost:6379")
+            store._redis = None  # Not connected
+
+            mock_redis.xlen = AsyncMock(return_value=0)
+            mock_redis.delete = AsyncMock()
+
+            await store.clear_metrics()
+
+            # Should have connected
+            assert store._redis is not None
+
+    @pytest.mark.asyncio
+    async def test_clear_all_auto_connects_for_config(self, mock_redis):
+        """Test clear_all auto-connects for config deletion (line 598)."""
+        with patch("omnidaemon.storage.redis_store.aioredis") as mock_aioredis:
+            mock_aioredis.from_url = AsyncMock(return_value=mock_redis)
+            store = RedisStore(redis_url="redis://localhost:6379")
+            store._redis = None  # Not connected initially
+
+            # Set up mocks for clear_agents, clear_results, clear_metrics
+            # clear_agents calls scan_iter twice, clear_results once, clear_all once
+            call_count = 0
+
+            def scan_iter_side_effect(match):
+                nonlocal call_count
+                call_count += 1
+                return MockAsyncIterator([])
+
+            mock_redis.scan_iter = MagicMock(side_effect=scan_iter_side_effect)
+            mock_redis.delete = AsyncMock()
+            mock_redis.xlen = AsyncMock(return_value=0)
+
+            # First call will connect, then clear_all will check again at line 598
+            await store.clear_all()
+
+            # Should have connected
+            assert store._redis is not None
+            # Verify that the check at line 598 was hit (after clear_agents, clear_results, clear_metrics)
+            assert call_count >= 3  # At least 3 scan_iter calls before the check
+
+    @pytest.mark.asyncio
+    async def test_clear_all_deletes_config_keys(self, store, mock_redis):
+        """Test clear_all deletes config keys (lines 604-605)."""
+        # clear_agents() calls scan_iter twice (agent keys, then topic sets)
+        # clear_results() calls scan_iter once
+        # clear_all() calls scan_iter once for config keys
+        call_count = 0
+
+        def scan_iter_side_effect(match):
+            nonlocal call_count
+            call_count += 1
+            if call_count <= 2:
+                # First two calls from clear_agents
+                return MockAsyncIterator([])
+            elif call_count == 3:
+                # Third call from clear_results
+                return MockAsyncIterator([])
+            else:
+                # Fourth call from clear_all for config keys
+                return MockAsyncIterator(["omni:config:key1", "omni:config:key2"])
+
+        mock_redis.scan_iter = MagicMock(side_effect=scan_iter_side_effect)
+        mock_redis.delete = AsyncMock()
+        mock_redis.xlen = AsyncMock(return_value=0)
+
+        counts = await store.clear_all()
+
+        # Should have deleted config keys
+        assert counts["config"] == 2
+        assert mock_redis.delete.call_count >= 2  # At least 2 config keys deleted
