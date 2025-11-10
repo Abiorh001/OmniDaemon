@@ -166,7 +166,8 @@ jobs:
           coverage_str = f"{coverage:.2f}%"
           # URL encode the coverage string for the badge (shields.io format)
           coverage_encoded = quote(coverage_str, safe='')
-          badge_pattern = r'\[!\[Coverage\]\(https://img\.shields\.io/badge/coverage-[^)]+\)\]'
+          # Match the full badge including the link: [![Coverage](badge-url)](link-url)
+          badge_pattern = r'\[!\[Coverage\]\(https://img\.shields\.io/badge/coverage-[^)]+\)\]\([^)]+\)'
           new_badge = f'[![Coverage](https://img.shields.io/badge/coverage-{coverage_encoded}-{color})](https://github.com/omnirexflora-labs/OmniDaemon)'
 
           updated_readme = re.sub(badge_pattern, new_badge, readme)
