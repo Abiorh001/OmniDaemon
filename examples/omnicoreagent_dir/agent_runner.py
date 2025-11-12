@@ -119,97 +119,105 @@ class OmniAgentRunner:
                 logger.warning(f"{self.agent.name}: MCP cleanup failed: {exc}")
 
 
-filesystem_agent_runner = OmniAgentRunner()
+# filesystem_agent_runner = OmniAgentRunner()
 
 
-async def call_file_system_agent(message: dict):
-    print(f"event payload is here: {message}")
-    await filesystem_agent_runner.initialize()
-    result = await filesystem_agent_runner.handle_chat(message=message.get("content"))
-    return {"status": "success", "data": result}
+# async def call_file_system_agent(message: dict):
+#     print(f"event payload is here: {message}")
+#     await filesystem_agent_runner.initialize()
+#     result = await filesystem_agent_runner.handle_chat(message=message.get("content"))
+#     return {"status": "success", "data": result}
 
 
-async def call_responset(message: dict):
-    print(f"event payload is here: {message}")
+# async def call_responset(message: dict):
+#     print(f"event payload is here: {message}")
 
 
-async def main():
-    try:
-        # Register agents
-        logger.info("Registering agents...")
-        await sdk.register_agent(
-            agent_config=AgentConfig(
-                name="OMNICOREAGENT_FILESYSTEM_AGENT",
-                topic="file_system.tasks",
-                callback=call_file_system_agent,
-                description="Help the user manage their files. You can list files, read files, etc.",
-                tools=[],
-                config=SubscriptionConfig(
-                    reclaim_idle_ms=6000, dlq_retry_limit=3, consumer_count=3
-                ),
-            )
-        )
+# async def main():
+#     try:
+#         # Register agents
+#         logger.info("Registering agents...")
+#         await sdk.register_agent(
+#             agent_config=AgentConfig(
+#                 name="OMNICOREAGENT_FILESYSTEM_AGENT",
+#                 topic="file_system.tasks",
+#                 callback=call_file_system_agent,
+#                 description="Help the user manage their files. You can list files, read files, etc.",
+#                 tools=[],
+#                 config=SubscriptionConfig(
+#                     reclaim_idle_ms=6000, dlq_retry_limit=3, consumer_count=3
+#                 ),
+#             )
+#         )
 
-        await sdk.register_agent(
-            agent_config=AgentConfig(
-                name="OMNICOREAGENT_RESPONSE",
-                topic="file_system.response",
-                callback=call_responset,
-                description="response from file system agent.",
-                tools=[],
-                config=SubscriptionConfig(
-                    reclaim_idle_ms=6000, dlq_retry_limit=3, consumer_count=1
-                ),
-            )
-        )
+#         await sdk.register_agent(
+#             agent_config=AgentConfig(
+#                 name="OMNICOREAGENT_RESPONSE",
+#                 topic="file_system.response",
+#                 callback=call_responset,
+#                 description="response from file system agent.",
+#                 tools=[],
+#                 config=SubscriptionConfig(
+#                     reclaim_idle_ms=6000, dlq_retry_limit=3, consumer_count=1
+#                 ),
+#             )
+#         )
 
-        logger.info("Agents registered successfully")
+#         logger.info("Agents registered successfully")
 
-        # Start the agent runner
-        logger.info("Starting OmniDaemon agent runner...")
-        await sdk.start()
-        logger.info("OmniDaemon agent runner started")
+#         # Start the agent runner
+#         logger.info("Starting OmniDaemon agent runner...")
+#         await sdk.start()
+#         logger.info("OmniDaemon agent runner started")
 
-        # Start API server if enabled
-        enable_api = config("OMNIDAEMON_API_ENABLED", default=False, cast=bool)
-        api_port = config("OMNIDAEMON_API_PORT", default=8765, cast=int)
-        if enable_api:
-            asyncio.create_task(start_api_server(sdk, port=api_port))
-            logger.info(f"OmniDaemon API running on http://127.0.0.1:{api_port}")
+#         # Start API server if enabled
+#         enable_api = config("OMNIDAEMON_API_ENABLED", default=False, cast=bool)
+#         api_port = config("OMNIDAEMON_API_PORT", default=8765, cast=int)
+#         if enable_api:
+#             asyncio.create_task(start_api_server(sdk, port=api_port))
+#             logger.info(f"OmniDaemon API running on http://127.0.0.1:{api_port}")
 
-        # Keep running to listen to new messages
-        logger.info("Agent runner is now processing events. Press Ctrl+C to stop.")
-        try:
-            while True:
-                await asyncio.sleep(1)
-        except (KeyboardInterrupt, asyncio.CancelledError):
-            logger.info("Received shutdown signal (Ctrl+C)...")
+#         # Keep running to listen to new messages
+#         logger.info("Agent runner is now processing events. Press Ctrl+C to stop.")
+#         try:
+#             while True:
+#                 await asyncio.sleep(1)
+#         except (KeyboardInterrupt, asyncio.CancelledError):
+#             logger.info("Received shutdown signal (Ctrl+C)...")
 
-    except (KeyboardInterrupt, asyncio.CancelledError):
-        logger.info("Received shutdown signal...")
-    except Exception as e:
-        logger.error(f"Error during agent runner execution: {e}", exc_info=True)
-        raise
+#     except (KeyboardInterrupt, asyncio.CancelledError):
+#         logger.info("Received shutdown signal...")
+#     except Exception as e:
+#         logger.error(f"Error during agent runner execution: {e}", exc_info=True)
+#         raise
 
-    finally:
-        # Always cleanup, even if there was an error
-        logger.info("Shutting down OmniDaemon...")
-        try:
-            await sdk.shutdown()
-            logger.info("OmniDaemon shutdown complete")
-        except Exception as e:
-            logger.error(f"Error during shutdown: {e}", exc_info=True)
+#     finally:
+#         # Always cleanup, even if there was an error
+#         logger.info("Shutting down OmniDaemon...")
+#         try:
+#             await sdk.shutdown()
+#             logger.info("OmniDaemon shutdown complete")
+#         except Exception as e:
+#             logger.error(f"Error during shutdown: {e}", exc_info=True)
 
-        # Cleanup OmniAgent resources
-        try:
-            await filesystem_agent_runner.shutdown()
-            logger.info("OmniAgent cleanup complete")
-        except Exception as e:
-            logger.error(f"Error during OmniAgent cleanup: {e}", exc_info=True)
+#         # Cleanup OmniAgent resources
+#         try:
+#             await filesystem_agent_runner.shutdown()
+#             logger.info("OmniAgent cleanup complete")
+#         except Exception as e:
+#             logger.error(f"Error during OmniAgent cleanup: {e}", exc_info=True)
 
 
-# -----------------------------
-# Run the example
-# -----------------------------
-if __name__ == "__main__":
-    asyncio.run(main())
+# # -----------------------------
+# # Run the example
+# # -----------------------------
+# if __name__ == "__main__":
+#     asyncio.run(main())
+
+
+
+
+
+
+
+
