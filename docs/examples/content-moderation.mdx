@@ -1,0 +1,136 @@
+# Content Moderation Pipeline
+
+A real-world example that combines **OmniDaemon** with **OmniCore Agent** to moderate user-generated content across the filesystem.
+
+## Overview
+
+- Monitors configurable directories (Desktop/Documents by default)
+- OmniCore agent uses custom tools + MCP filesystem access
+- All moderation decisions stored in SQLite for dashboards and audits
+- Results automatically routed to a review agent via `reply_to`
+
+## Environment Setup
+
+```bash
+# Optional: customize directories the agent can access (comma separated)
+export CONTENT_MODERATION_DIRS="~/Desktop,~/SharedContent"
+
+# Optional: enable the OmniDaemon API for monitoring
+export OMNIDAEMON_API_ENABLED=true
+export OMNIDAEMON_API_PORT=8765
+
+# Optional: enable Prometheus metrics (examples/content_moderation/metrics.py)
+export CONTENT_MODERATION_METRICS_PORT=9102
+
+# Recommended optional dependencies (native file watcher + Prometheus metrics)
+uv pip install watchdog prometheus-client
+```
+
+## Start the Agents
+
+```bash
+uv run python examples/content_moderation/agent_runner.py
+```
+
+This registers two OmniCore agents:
+
+1. `CONTENT_MODERATION_AGENT` – Executes moderation cycles using MCP filesystem access plus the custom moderation toolset.
+2. `CONTENT_MODERATION_REVIEW_AGENT` – Ingests the moderation response and calls `record_moderation_result` (tool) to archive results in SQLite.
+
+## Trigger Moderation Tasks
+
+### 1. Automated Watcher (continuous)
+
+```bash
+uv run python examples/content_moderation/publisher.py --directories ~/Projects ~/Documents --watch --interval 5
+
+# Use native filesystem events instead of polling (requires watchdog)
+uv run python examples/content_moderation/publisher.py --directories ~/Projects --watch --watchdog
+```
+
+Watches the specified directories every 5 seconds. When a new or modified file is detected, it:
+
+1. Copies the file into a managed ingest workspace (`~/.omniagent/moderation_ingest/`).
+2. Publishes a `content_moderation.tasks` event pointing to the ingested copy (with the original path recorded in metadata).
+3. Lets the moderation + review agents take over.
+
+### 2. Manual Moderation Cycle
+
+```bash
+uv run python examples/content_moderation/publisher.py
+```
+
+### 3. Scan Specific Directories Once
+
+```bash
+uv run python examples/content_moderation/publisher.py --directories ~/Projects ~/Documents
+```
+
+### 4. Analyze a Single File Immediately (bypasses watch)
+
+```bash
+uv run python examples/content_moderation/publisher.py --task single_file --file ~/Projects/post.txt
+```
+
+### 5. Generate a Report-Only Run
+
+```bash
+uv run python examples/content_moderation/publisher.py --task report
+```
+
+Under the hood each command:
+
+1. Copies relevant files into the ingest workspace (unless report-only).
+2. Validates the event payload against a Pydantic schema before publishing (`ModerationEvent`).
+3. Publishes events with metadata (`original_path`, `ingested_path`, timestamps, and optional user metadata).
+4. Sets `reply_to="content_moderation.review"` so the review agent receives the moderation verdict.
+
+### 6. Programmatic Ingestion (API / Webhook)
+
+```bash
+uv run python examples/content_moderation/ingest.py /path/to/file.txt --metadata '{"tenant":"acme"}'
+```
+
+Useful for services that want to push individual files into the moderation flow without scanning directories.
+
+## Inspecting Results
+
+### CLI Diagnostics
+
+```bash
+omnidaemon task list --topic content_moderation.review
+omnidaemon bus inspect --stream content_moderation.review --limit 5
+```
+
+### SQLite Data
+
+- Database path: `~/.omniagent/moderation.db`
+- Tables created automatically:
+  - `flagged_content` – Items pending human review
+  - `approved_content` – Clean items
+  - `removed_content` – Content moved to quarantine
+  - `moderation_reviews` – Raw agent output for analytics
+
+```bash
+sqlite3 ~/.omniagent/moderation.db 'SELECT * FROM moderation_reviews ORDER BY created_at DESC LIMIT 5;'
+
+# Query flagged items only
+sqlite3 ~/.omniagent/moderation.db 'SELECT * FROM flagged_content ORDER BY flagged_at DESC LIMIT 5;'
+
+# Export to CSV
+sqlite3 -header -csv ~/.omniagent/moderation.db 'SELECT * FROM moderation_reviews' > reviews.csv
+```
+
+## How It Works
+
+1. **Publisher** emits an event to `content_moderation.tasks`, optionally specifying directories or a single file.
+2. **OmniCore Agent** executes the moderation workflow using MCP filesystem access and custom tools:
+   - Scans directories for new/modified files
+   - Analyzes content (spam, profanity, quality, duplication)
+   - Flags, approves, removes, or reports content via SQLite-backed tools
+3. **Reply Routing**: OmniDaemon sends the agent’s response to `content_moderation.review`.
+4. **Review Agent** (OmniCore) calls the `record_moderation_result` tool, archiving the response into SQLite (`moderation_reviews`) so dashboards and analytics have a durable feed.
+5. **Metrics** (optional) expose Prometheus counters (`content_moderation_events_total`, `content_moderation_decisions_total`, etc.) on `CONTENT_MODERATION_METRICS_PORT`.
+
+This pattern demonstrates a production-grade loop: automated detection of filesystem changes, ingestion and normalization, OmniCore agent moderation, durable archiving, and live metrics. Extend it with additional MCP tools (vector search, DLP scanners) or swap the watch mechanism for platform-specific event emitters for lower latency.
+

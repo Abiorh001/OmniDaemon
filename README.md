@@ -19,6 +19,127 @@
 
 ---
 
+## 🌊 Why OmniDaemon Exists: The Challenges with Scaling Intelligent Agents
+
+> **This is the foundational reason OmniDaemon was built.** Understanding this will help you see why event-driven architecture is not just a technical choice, but a necessity for building scalable AI agent systems.
+
+> _Perspectives in this section draw on Sean Falconer's analysis in ["The Future of AI Agents is Event-Driven"](https://seanfalconer.medium.com/the-future-of-ai-agents-is-event-driven-9e25124060d6)._ [[source]](https://seanfalconer.medium.com/the-future-of-ai-agents-is-event-driven-9e25124060d6)
+
+### The Core Challenge
+
+Scaling agents — whether a single agent or a collaborative system — hinges on their ability to access and share data effortlessly. Agents need to gather information from multiple sources, including other agents, tools, and external systems, to make decisions and take action.
+
+**Single agent dependencies**
+
+Connecting agents to the tools and data they need is fundamentally a **distributed systems problem**. This complexity mirrors the challenges faced in designing microservices, where components must communicate efficiently without creating bottlenecks or rigid dependencies.
+
+Like microservices, agents must communicate efficiently and ensure their outputs are useful across the broader system. And like any service, their outputs shouldn't just loop back into the AI application — they should flow into other critical systems like data warehouses, CRMs, CDPs, and customer success platforms.
+
+Sure, you could connect agents and tools through RPC and APIs, but that's a recipe for **tightly coupled systems**. Tight coupling makes it harder to scale, adapt, or support multiple consumers of the same data. Agents need flexibility. Their outputs must seamlessly feed into other agents, services, and platforms without locking everything into rigid dependencies.
+
+### What's the Solution?
+
+**Loose coupling through an event-driven architecture.** It's the backbone that allows agents to share information, act in real time, and integrate with the broader ecosystem — without the headaches of tight coupling.
+
+---
+
+## 📚 Event-Driven Architectures: A Primer
+
+In the early days, software systems were monoliths. Everything lived in a single, tightly integrated codebase. While simple to build, monoliths became a nightmare as they grew.
+
+Scaling was a blunt instrument: you had to scale the entire application, even if only one part needed it. This inefficiency led to bloated systems and brittle architectures that couldn't handle growth.
+
+**Microservices changed this.**
+
+By breaking applications into smaller, independently deployable components, teams could scale and update specific parts without touching the whole system. But this created a new challenge: how do all these smaller services communicate effectively?
+
+If we connect services through direct RPC or API calls, we create a giant mess of interdependencies. If one service goes down, it impacts all nodes along the connected path.
+
+**EDA solved the problem.**
+
+Instead of tightly coupled, synchronous communication, EDA enables components to communicate asynchronously through events. Services don't wait on each other — they react to what's happening in real-time.
+
+This approach made systems more resilient and adaptable, allowing them to handle the complexity of modern workflows. It wasn't just a technical breakthrough; it was a survival strategy for systems under pressure.
+
+---
+
+## ⚠️ The Rise and Fall of Early Social Giants
+
+The rise and fall of early social networks like Friendster underscore the importance of scalable architecture. Friendster captured massive user bases early on, but their systems couldn't handle the demand. Performance issues drove users away, and the platform ultimately failed.
+
+On the flip side, Facebook thrived not just because of its features but because it invested in scalable infrastructure. It didn't crumble under the weight of success — it rose to dominate.
+
+**Today, we risk seeing a similar story play out with AI agents.**
+
+Like early social networks, agents will experience rapid growth and adoption. Building agents isn't enough. The real question is whether your architecture can handle the complexity of distributed data, tool integrations, and multi-agent collaboration. Without the right foundation, your agent stack could fall apart just like the early casualties of social media.
+
+---
+
+## 🚀 The Future is Event-Driven Agents
+
+The future of AI isn't just about building smarter agents — it's about creating systems that can evolve and scale as the technology advances. With the AI stack and underlying models changing rapidly, rigid designs quickly become barriers to innovation. To keep pace, we need architectures that prioritize flexibility, adaptability, and seamless integration. **EDA is the foundation for this future**, enabling agents to thrive in dynamic environments while remaining resilient and scalable.
+
+---
+
+## 🤝 Agents as Microservices with Informational Dependencies
+
+Agents are similar to microservices: they're autonomous, decoupled, and capable of handling tasks independently. But agents go further.
+
+While microservices typically process discrete operations, agents rely on shared, context-rich information to reason, make decisions, and collaborate. This creates unique demands for managing dependencies and ensuring real-time data flows.
+
+For instance, an agent might pull customer data from a CRM, analyze live analytics, and use external tools — all while sharing updates with other agents. These interactions require a system where agents can work independently but still exchange critical information fluidly.
+
+**EDA solves this challenge by acting as a "central nervous system" for data.** It allows agents to broadcast events asynchronously, ensuring that information flows dynamically without creating rigid dependencies. This decoupling lets agents operate autonomously while integrating seamlessly into broader workflows and systems.
+
+---
+
+## 🔓 Decoupling While Keeping Context Intact
+
+Building flexible systems doesn't mean sacrificing context. Traditional, tightly coupled designs often bind workflows to specific pipelines or technologies, forcing teams to navigate bottlenecks and dependencies. Changes in one part of the stack ripple through the system, slowing innovation and scaling efforts.
+
+**EDA eliminates these constraints.** By decoupling workflows and enabling asynchronous communication, EDA allows different parts of the stack — agents, data sources, tools, and application layers — to function independently.
+
+Take today's AI stack, for example. MLOps teams manage pipelines like RAG, data scientists select models, and application developers build the interface and backend. A tightly coupled design forces all these teams into unnecessary interdependencies, slowing delivery and making it harder to adapt as new tools and techniques emerge.
+
+In contrast, an event-driven system ensures that workflows stay loosely coupled, allowing each team to innovate independently.
+
+Application layers don't need to understand the AI's internals — they simply consume results when needed. This decoupling also ensures AI insights don't remain siloed. Outputs from agents can seamlessly integrate into CRMs, CDPs, analytics tools, and more, creating a unified, adaptable ecosystem.
+
+---
+
+## ⚡ Scaling Agents with Event-Driven Architecture
+
+**EDA is the backbone of this transition to agentic systems.**
+
+Its ability to decouple workflows while enabling real-time communication ensures that agents can operate efficiently at scale. Platforms like Kafka exemplify the advantages of EDA in an agent-driven system:
+
+- **Horizontal Scalability**: Distributed design supports the addition of new agents or consumers without bottlenecks, ensuring the system grows effortlessly.
+- **Low Latency**: Real-time event processing enables agents to respond instantly to changes, ensuring fast and reliable workflows.
+- **Loose Coupling**: By communicating through topics rather than direct dependencies, agents remain independent and scalable.
+- **Event Persistence**: Durable message storage guarantees that no data is lost in transit, which is critical for high-reliability workflows.
+
+Data streaming enables the continuous flow of data throughout a business. A central nervous system acts as the unified backbone for real-time data flow, seamlessly connecting disparate systems, applications, and data sources to enable efficient agent communication and decision-making.
+
+This architecture is a natural fit for frameworks like Anthropic's Model Context Protocol (MCP).
+
+MCP provides a universal standard for integrating AI systems with external tools, data sources, and applications, ensuring secure and seamless access to up-to-date information. By simplifying these connections, MCP reduces development effort while enabling context-aware decision-making.
+
+**EDA addresses many of the challenges MCP aims to solve.** MCP requires seamless access to diverse data sources, real-time responsiveness, and scalability to support complex multi-agent workflows. By decoupling systems and enabling asynchronous communication, EDA simplifies integration and ensures agents can consume and produce events without rigid dependencies.
+
+---
+
+## 🎯 Event-Driven Agents Will Define the Future of AI
+
+The AI landscape is evolving rapidly, and architectures must evolve with it.
+
+And businesses are ready. A Forum Ventures survey found that 48% of senior IT leaders are prepared to integrate AI agents into operations, with 33% saying they're very prepared. This shows a clear demand for systems that can scale and handle complexity.
+
+**EDA is the key to building agent systems that are flexible, resilient, and scalable.** It decouples components, enables real-time workflows, and ensures agents can integrate seamlessly into broader ecosystems.
+
+Those who adopt EDA won't just survive — they'll gain a competitive edge in this new wave of AI innovation. The rest? They risk being left behind, casualties of their own inability to scale.
+
+---
+
 ## 🎯 What is OmniDaemon?
 
 > **"Kubernetes for AI Agents"** - A universal runtime that makes AI agents autonomous, observable, and scalable.
@@ -1859,68 +1980,51 @@ python examples/google_adk/agent_runner.py
 
 ---
 
-### 3. Publishing Tasks
+### 3. Content Moderation Pipeline (OmniCore Agent + SQLite)
 
-Once your agents are running, publish tasks to trigger them.
+**Goal:** Automate moderation of filesystem content, flag policy violations, and persist outcomes for BI dashboards.
 
-**File**: `examples/publisher.py`
+- **Agents:** `examples/content_moderation/agent_runner.py`
+  - `CONTENT_MODERATION_AGENT` – OmniCore agent with filesystem MCP tool + rich moderation toolkit
+  - `CONTENT_MODERATION_REVIEW_AGENT` – Stores moderation results in SQLite
+- **Publisher:** `examples/content_moderation/publisher.py`
+- **Topics:**
+  - Input: `content_moderation.tasks`
+  - Review: `content_moderation.review`
+- **Data store:** `~/.omniagent/moderation.db` (auto-created)
 
-```python
-import asyncio
-from omnidaemon import OmniDaemonSDK
-from omnidaemon import EventEnvelope, PayloadBase
-
-sdk = OmniDaemonSDK()
-
-async def publish_tasks():
-    """Publish tasks to agent topics."""
-
-    # Task payload
-    payload = {
-        "content": """
-        Create a directory named "test_directory".
-        Create two text files: "file1.txt" and "file2.txt".
-        Write sample content into both files.
-        List the directory contents.
-        Read file1.txt to verify content.
-        """,
-    }
-
-    # Create event envelope
-    event = EventEnvelope(
-        topic="file_system.tasks",
-        payload=PayloadBase(
-            content=payload["content"],
-            webhook=None,  # Optional: callback URL
-        ),
-    )
-
-    # Publish to event bus
-    task_id = await sdk.publish_task(event_envelope=event)
-    print(f"📨 Published task: {task_id}")
-
-    # Wait a bit for processing
-    await asyncio.sleep(5)
-
-    # Retrieve result
-        result = await sdk.get_result(task_id)
-    print(f"✅ Result: {result}")
-
-if __name__ == "__main__":
-    asyncio.run(publish_tasks())
-```
-
-**Run it**:
 ```bash
-# Ensure your agent runner is already running
-python examples/publisher.py
+# Terminal 1 – start the OmniCore agents (moderation + review archiver)
+uv run python examples/content_moderation/agent_runner.py
+
+# Option A – continuous watch over selected directories (polling)
+uv run python examples/content_moderation/publisher.py --directories ~/Projects ~/Docs --watch --interval 5
+
+# Option B – native filesystem events (requires watchdog)
+uv pip install watchdog prometheus-client
+uv run python examples/content_moderation/publisher.py --directories ~/Projects --watch --watchdog
+
+# Option C – manual cycle or targeted file scans
+uv run python examples/content_moderation/publisher.py                          # default directories
+uv run python examples/content_moderation/publisher.py --directories ~/Projects # one-off diff
+uv run python examples/content_moderation/publisher.py --task single_file --file ~/Docs/post.txt
+
+# Programmatic ingestion (copy + publish single file)
+uv run python examples/content_moderation/ingest.py ~/Docs/post.txt --metadata '{"tenant":"acme"}'
+
+# Inspect moderation output
+omnidaemon task list --topic content_moderation.review
+sqlite3 ~/.omniagent/moderation.db 'SELECT * FROM moderation_reviews ORDER BY created_at DESC LIMIT 5;'
 ```
 
-**Or use the CLI**:
-```bash
-omnidaemon task publish --topic file_system.tasks \
-  --payload '{"content":"List all files in /tmp"}'
-```
+**Highlights:**
+- OmniCore agents leverage custom Python tooling (spam/profanity detection, PII checks, hate-speech heuristics, SQLite logging, quarantine handling) and automatically gain access to the ingest workspace.
+- `publisher.py` supports a continuous watcher (polling or watchdog). New or modified files are copied into `~/.omniagent/moderation_ingest/` before schema-validated events are published to the moderation topic.
+- `ingest.py` exposes a simple API-friendly entry point for services that want to push individual files into the moderation flow.
+- All events/decisions are validated via `ModerationEvent` / `ModerationDecision` (Pydantic) before reaching the agents.
+- Prometheus metrics (`content_moderation_events_total`, `...decisions_total`, etc.) are available when `prometheus-client` is installed and `CONTENT_MODERATION_METRICS_PORT` is set.
+- `reply_to` automatically routes agent responses to the review topic, where the second OmniCore agent archives results via the `record_moderation_result` tool.
+- Extend with dashboards (Superset, Metabase) or escalation workflows using the SQLite tables.
 
 ---
 

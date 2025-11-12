@@ -4,6 +4,26 @@ Event-Driven Architecture is the foundational pattern that makes OmniDaemon powe
 
 ---
 
+## Why EDA Matters: The Foundation
+
+> **Before diving into the technical details, understand the "why" behind event-driven architecture for AI agents.** This is the foundational reason OmniDaemon was built.
+
+> _This framing is inspired by Sean Falconer's article ["The Future of AI Agents is Event-Driven"](https://seanfalconer.medium.com/the-future-of-ai-agents-is-event-driven-9e25124060d6)._ [[source]](https://seanfalconer.medium.com/the-future-of-ai-agents-is-event-driven-9e25124060d6)
+
+Scaling agents — whether a single agent or a collaborative system — hinges on their ability to access and share data effortlessly. Agents need to gather information from multiple sources, including other agents, tools, and external systems, to make decisions and take action.
+
+Connecting agents to the tools and data they need is fundamentally a **distributed systems problem**. This complexity mirrors the challenges faced in designing microservices, where components must communicate efficiently without creating bottlenecks or rigid dependencies.
+
+Like microservices, agents must communicate efficiently and ensure their outputs are useful across the broader system. Their outputs shouldn't just loop back into the AI application — they should flow into other critical systems like data warehouses, CRMs, CDPs, and customer success platforms.
+
+You could connect agents and tools through RPC and APIs, but that's a recipe for **tightly coupled systems**. Tight coupling makes it harder to scale, adapt, or support multiple consumers of the same data. Agents need flexibility. Their outputs must seamlessly feed into other agents, services, and platforms without locking everything into rigid dependencies.
+
+**Loose coupling through an event-driven architecture is the solution.** It's the backbone that allows agents to share information, act in real time, and integrate with the broader ecosystem — without the headaches of tight coupling.
+
+For a deeper exploration of why EDA is essential for scaling intelligent agents, see [Why OmniDaemon Exists](/).
+
+---
+
 ## What is Event-Driven Architecture?
 
 In traditional architectures, components talk directly to each other (request-response):

@@ -2,6 +2,7 @@
 __pycache__/
 *.py[codz]
 *$py.class
+internal_docs/
 
 # C extensions
 *.so
@@ -232,3 +233,4 @@ dmypy.json
 .pytype/
 .pyre/
 .python-version
+
