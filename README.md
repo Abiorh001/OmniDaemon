@@ -3302,8 +3302,7 @@ OmniDaemon is built by the **OmniDaemon Team** - the same team behind [OmniCore 
 **Connect with the creator:**
 - GitHub: [@Abiorh001](https://github.com/Abiorh001)
 - X (Twitter): [@abiorhmangana](https://x.com/abiorhmangana)
-- Website: [mintify.com](https://mintify.com)
-- Docs: [abiorh001.github.io/OmniDaemon](https://abiorh001.github.io/OmniDaemon/)
+- Docs: [https://omnirexflora-labs.mintlify.app](https://omnirexflora-labs.mintlify.app/)
 
 ---
 
@@ -3327,6 +3326,6 @@ And all the amazing AI agent frameworks that OmniDaemon supports!
 
 *From the creators of [OmniCore Agent](https://github.com/omnirexflora-labs/omnicoreagent) — building the future of event-driven AI systems*
 
-[⭐ Star us on GitHub](https://github.com/omnirexflora-labs/OmniDaemon) | [🐛 Report Bug](https://github.com/omnirexflora-labs/OmniDaemon/issues) | [💡 Request Feature](https://github.com/omnirexflora-labs/OmniDaemon/issues) | [📖 Documentation](https://abiorh001.github.io/OmniDaemon/)
+[⭐ Star us on GitHub](https://github.com/omnirexflora-labs/OmniDaemon) | [🐛 Report Bug](https://github.com/omnirexflora-labs/OmniDaemon/issues) | [💡 Request Feature](https://github.com/omnirexflora-labs/OmniDaemon/issues) | [📖 Documentation](https://omnirexflora-labs.mintlify.app/)
 
 </div>
