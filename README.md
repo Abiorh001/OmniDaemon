@@ -3266,7 +3266,7 @@ omnidaemon agent list
 
 **📖 Documentation:**
 - **This README** - Complete getting started guide
-- **[Official Docs](https://abiorh001.github.io/OmniDaemon/)** - Full documentation
+- **[Official Docs](https://omnirexflora-labs.mintlify.app/)** - Full documentation
 - **Examples/** - Working code examples (`examples/omnicoreagent/`, `examples/google_adk/`)
 
 **💬 Get Help:**
