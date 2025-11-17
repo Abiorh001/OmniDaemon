@@ -184,20 +184,41 @@ Event happens → AI agent reacts → Result stored ✅
 
 ---
 
-### When to Use OmniDaemon
+### **When to Use OmniDaemon**
 
-**✅ Perfect For:**
-- **Background AI Agents** - Autonomous agents that react to events
-- **Event-Driven Workflows** - Multi-step AI processing pipelines
-- **Multi-Agent Systems** - Multiple agents collaborating on tasks
-- **Async AI Processing** - Long-running AI tasks (not real-time chat)
-- **Enterprise AI Ops** - Scalable, observable, production AI systems
+OmniDaemon is a **distributed, event-driven runtime** for AI agents and automation.
+It works seamlessly alongside HTTP, WebSockets, and SSE — and often *powers the internal logic* behind them.
 
-**❌ Not Recommended For:**
-- **Simple HTTP APIs** - Use FastAPI/Flask directly (simpler)
-- **Real-Time Chat** - Use WebSockets/SSE (lower latency)
-- **Synchronous Request-Response** - Use REST APIs (simpler architecture)
-- **Single-Shot Scripts** - Use Python scripts directly (no runtime needed)
+#### **✅ Perfect For**
+
+* **Background AI Agents**
+  Autonomous agents reacting to events, triggers, or system signals.
+
+* **Event-Driven Workflows**
+  Multi-step pipelines coordinated through events.
+
+* **Distributed Multi-Agent Systems**
+  Sub-agents running across different servers, runtimes, or toolsets.
+
+* **Async & Long-Running AI Tasks**
+  Workloads that shouldn’t block a client request (analysis, ingestion, evaluation).
+
+* **Enterprise AI Ops**
+  Durable, observable, scalable systems with retries, logs, and monitoring baked in.
+
+* **Hybrid Real-Time + Background Work**
+  Use **SSE/WebSockets for live streaming**, while
+  **OmniDaemon handles internal agent events and orchestration**.
+
+
+#### **❌ Overkill For (Simpler Alternatives Exist)**
+
+* **Simple HTTP APIs** — FastAPI/Flask are more straightforward.
+* **Pure Real-Time Chat Only** — WebSockets/SSE alone give lower direct latency.
+* **Strict Synchronous Request→Response** — REST/RPC is simpler when no async logic is involved.
+* **Single-Shot Scripts** — A basic Python script is sufficient.
+
+---
 
 **🆚 Compared to Alternatives:**
 
