@@ -379,9 +379,9 @@ async def greeter(message: dict):
     - examples/omnicoreagent/agent_runner.py (OmniCore)
     - examples/google_adk/agent_runner.py (Google ADK)
     """
-    content = message.get("content", {})
-    name = content.get("name", "stranger")
-    return {"reply": f"Hello, {name}! 👋"}
+    content = message.get("content", "")
+    print(f"📨 Processing request for: {content}")
+    return {"reply": f"Hello, {content}! Welcome to OmniDaemon. 🎉"}
 
 async def main():
     # Register agent - only topic and callback are required!
@@ -448,10 +448,9 @@ from omnidaemon import OmniDaemonSDK, AgentConfig, SubscriptionConfig
 sdk = OmniDaemonSDK()
 
 async def greeter(message: dict):
-    content = message.get("content", {})
-    name = content.get("name", "stranger")
-    print(f"📨 Processing request for: {name}")
-    return {"reply": f"Hello, {name}! Welcome to OmniDaemon. 🎉"}
+    content = message.get("content", "")
+    print(f"📨 Processing request for: {content}")
+    return {"reply": f"Hello, {content}! Welcome to OmniDaemon. 🎉"}
 
 async def main():
     try:
@@ -649,7 +648,7 @@ async def my_callback(message: dict):
 ```python
 async def my_callback(message: dict):
     source = message.get("source")
-    content = message.get("content", {})
+    content = message.get("content", "")
 
     # Different logic based on source
     if source == "web-app":
@@ -672,7 +671,7 @@ async def my_callback(message: dict):
 ```python
 async def my_callback(message: dict):
     correlation_id = message.get("correlation_id")
-    content = message.get("content", {})
+    content = message.get("content", "")
 
     # Check if this is part of ongoing conversation
     if correlation_id:
@@ -693,7 +692,7 @@ async def my_callback(message: dict):
 ```python
 async def my_callback(message: dict):
     causation_id = message.get("causation_id")
-    content = message.get("content", {})
+    content = message.get("content", "")
 
     # Check what caused this event
     if causation_id:
@@ -722,7 +721,7 @@ async def my_callback(message: dict):
 **Pattern 5: Conditional Response Routing**
 ```python
 async def my_callback(message: dict):
-    content = message.get("content", {})
+    content = message.get("content", "")
     reply_to = message.get("reply_to")
     webhook = message.get("webhook")
 
@@ -764,7 +763,7 @@ async def my_callback(message: dict):
     to make intelligent routing decisions.
     """
     # Extract all metadata
-    content = message.get("content", {})
+    content = message.get("content", "")
     tenant_id = message.get("tenant_id")
     source = message.get("source")
     correlation_id = message.get("correlation_id")
@@ -894,7 +893,7 @@ async def main():
     event = EventEnvelope(
         topic="greet.user",              # REQUIRED
         payload=PayloadBase(
-            content={"name": "Alice"}     # REQUIRED
+            content="my name is alice"    # REQUIRED
         ),
     )
 
@@ -914,7 +913,7 @@ python publisher.py
 
 **That's it!** Only 2 things required:
 1. ✅ `topic` - Where to send the message
-2. ✅ `content` - Your data (can be dict, string, or JSON)
+2. ✅ `content` - Your data (string)
 
 **Everything else is auto-generated:**
 - `id` → UUID (e.g., `abc-123-def`)
@@ -941,7 +940,7 @@ async def main():
         topic="greet.user",                # REQUIRED: Agent's listening topic
 
         payload=PayloadBase(
-            content={"name": "Alice", "lang": "en"},    # REQUIRED: Your data
+            content="my name is alice",    # REQUIRED: Your data
 
             webhook="https://myapp.com/callback",       # Optional: HTTP callback
             # When task completes, OmniDaemon sends POST request to this URL
@@ -1048,7 +1047,7 @@ await sdk.register_agent(
 event = EventEnvelope(
     topic="process.user.input",
     payload=PayloadBase(
-        content={"text": "Hello"},
+        content="hello world",
         reply_to="process.result",  # ← Result goes here!
     ),
 )
@@ -1175,7 +1174,7 @@ tenant_id="tenant-123"
 ```python
 event = EventEnvelope(
     topic="my.topic",
-    payload=PayloadBase(content={"data": "..."})
+    payload=PayloadBase(content="my name is alice")
 )
 ```
 
@@ -1184,7 +1183,7 @@ event = EventEnvelope(
 event = EventEnvelope(
     topic="my.topic",
     payload=PayloadBase(
-        content={"data": "..."},
+        content="my name is alice",
         webhook="https://myapi.com/callback",  # Get notified!
     ),
     correlation_id=request_id,  # Track it!
@@ -1221,10 +1220,10 @@ event = EventEnvelope(
 #### Option C: Using CLI (If Available)
 ```bash
 # Simple
-omnidaemon task publish --topic greet.user --payload '{"name":"Alice"}'
+omnidaemon task publish --topic greet.user --content 'my name is alice'
 
 # With webhook
-omnidaemon task publish --topic greet.user --payload '{"name":"Alice"}' --webhook https://myapp.com/callback
+omnidaemon task publish --topic greet.user --content 'my name is alice' --webhook https://myapp.com/callback
 ```
 
 **✅ Expected output:**
